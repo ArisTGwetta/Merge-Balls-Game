@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Merge Balls: Ascension</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #2c3e50; /* Darker background for contrast */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            background-color: #ecf0f1;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            padding: 20px;
+            width: 400px; 
+            height: 700px; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Header Layout */
+        #header {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 0 10px;
+            box-sizing: border-box;
+        }
+
+        .score-box {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .label {
+            font-size: 12px;
+            color: #7f8c8d;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .value {
+            font-size: 28px;
+            color: #2c3e50;
+            font-weight: 800;
+        }
+
+        #next-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #next-ball-preview {
+            width: 35px;
+            height: 35px;
+            background-color: #ccc; 
+            border: 2px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            color: #fff;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        #game-canvas {
+            border: 4px solid #34495e;
+            background-color: #fff;
+            display: block;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            cursor: crosshair;
+            width: 400px;
+            height: 600px;
+        }
+
+        /* Flash animation for "Ascension" */
+        @keyframes flash {
+            0% { background-color: #fff; }
+            50% { background-color: #2ecc71; } /* Success Green */
+            100% { background-color: #fff; }
+        }
+        .flash-effect {
+            animation: flash 0.5s ease-out;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        
+        <div id="header">
+            <div class="score-box">
+                <span class="label">Score</span>
+                <span id="current-score" class="value">0</span>
+            </div>
+            <div class="score-box">
+                <span class="label">Best</span>
+                <span id="best-score" class="value">0</span>
+            </div>
+            <div id="next-container">
+                <div id="next-ball-preview"></div>
+                <span class="label" style="font-size: 10px; margin-top:2px;">Next</span>
+            </div>
+        </div>
+
+        <canvas id="game-canvas"></canvas>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const WIDTH = 400;
+        const HEIGHT = 600;
+        const MIN_BALL_SIZE = 20;
+        const GRAVITY = 0.55; 
+        const FRICTION = 0.96; 
+        const WALL_BOUNCE = 0.4;
+        const PHYSICS_SUBSTEPS = 8; 
+
+        // 11 Colors (1-11)
+        const BALL_COLORS = [
+            '#FF4D4D', '#FF9F43', '#FDCB6E', '#00D2D3', '#54A0FF', 
+            '#5F27CD', '#FF9FF3', '#D980FA', '#B53471', '#C4E538', '#2ecc71'
+        ];
+
+        // --- SETUP ---
+        const container = document.getElementById('game-container');
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('current-score');
+        const bestScoreElement = document.getElementById('best-score');
+        const nextBallElement = document.getElementById('next-ball-preview');
+
+        // High DPI Scaling
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = WIDTH * dpr;
+        canvas.height = HEIGHT * dpr;
+        ctx.scale(dpr, dpr);
+        canvas.style.width = `${WIDTH}px`;
+        canvas.style.height = `${HEIGHT}px`;
+
+        // --- STATE ---
+        let balls = [];
+        let score = 0;
+        let highScore = localStorage.getItem('mergeBallsBest') || 0;
+        let isDropping = false;
+        let dropX = WIDTH / 2;
+        let currentDroppableBall = null;
+        let isTouching = false; // Track touch state
+
+        // Initialize UI
+        bestScoreElement.textContent = highScore;
+
+        // --- CLASS ---
+        class Ball {
+            constructor(x, y, radius, value, color) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.value = value;
+                this.color = color;
+                this.vx = 0;
+                this.vy = 0;
+                this.mass = radius * 1.5;
+                this.isDroppable = false;
+                this.isDead = false;
+            }
+
+            draw() {
+                if (this.isDead) return;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                // Dynamic font size
+                ctx.font = `bold ${Math.max(12, Math.floor(this.radius * 0.8))}px Arial`;
+                ctx.shadowColor = "rgba(0,0,0,0.3)";
+                ctx.shadowBlur = 3;
+                ctx.fillText(this.value, this.x, this.y);
+                ctx.shadowBlur = 0;
+            }
+
+            stepMovement() {
+                if (this.isDead) return;
+                
+                if (this.isDroppable) {
+                    // Follow mouse/finger with smooth lag
+                    this.x += (dropX - this.x) * 0.2;
+                } else {
+                    this.vy += GRAVITY / PHYSICS_SUBSTEPS;
+                    this.x += this.vx / PHYSICS_SUBSTEPS;
+                    this.y += this.vy / PHYSICS_SUBSTEPS;
+                    this.handleWallCollisions();
+                }
+            }
+
+            applyFriction() {
+                if (!this.isDroppable && !this.isDead) {
+                    this.vx *= FRICTION;
+                    this.vy *= FRICTION;
+                }
+            }
+
+            handleWallCollisions() {
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx = -Math.abs(this.vx) * WALL_BOUNCE;
+                }
+                if (this.x + this.radius > WIDTH) {
+                    this.x = WIDTH - this.radius;
+                    this.vx = Math.abs(this.vx) * -WALL_BOUNCE;
+                }
+                if (this.y + this.radius > HEIGHT) {
+                    this.y = HEIGHT - this.radius;
+                    this.vy = Math.abs(this.vy) * -WALL_BOUNCE;
+                    if (Math.abs(this.vy) < 0.5) this.vy = 0;
+                    if (Math.abs(this.vx) < 0.1) this.vx = 0;
+                }
+            }
+        }
+
+        // --- HELPERS ---
+
+        function generateRandomBallConfig() {
+            // Values 1, 2, or 3
+            const randomValue = Math.floor(Math.random() * 3) + 1;
+            const radius = MIN_BALL_SIZE + (randomValue - 1) * 7;
+            const color = BALL_COLORS[(randomValue - 1) % BALL_COLORS.length];
+            return { value: randomValue, radius: radius, color: color };
+        }
+
+        let nextBallConfig = generateRandomBallConfig();
+
+        function createDroppableBall() {
+            currentDroppableBall = new Ball(
+                dropX, 50, 
+                nextBallConfig.radius,
+                nextBallConfig.value,
+                nextBallConfig.color
+            );
+            currentDroppableBall.isDroppable = true;
+            balls.push(currentDroppableBall);
+            nextBallConfig = generateRandomBallConfig();
+            updateNextBallPreview();
+        }
+
+        function updateNextBallPreview() {
+            nextBallElement.style.backgroundColor = nextBallConfig.color;
+            nextBallElement.textContent = nextBallConfig.value;
+        }
+
+        function triggerAscension() {
+            // Visual Flair
+            canvas.style.backgroundColor = '#d5f5e3'; // Light green tint
+            setTimeout(() => canvas.style.backgroundColor = '#fff', 300);
+            
+            // Bonus Score
+            score += 5000;
+            scoreElement.textContent = score;
+            checkHighScore();
+        }
+
+        function checkHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                bestScoreElement.textContent = highScore;
+                localStorage.setItem('mergeBallsBest', highScore);
+            }
+        }
+
+        function resolveInteraction(ballA, ballB) {
+            if (ballA.isDead || ballB.isDead) return;
+
+            const dx = ballB.x - ballA.x;
+            const dy = ballB.y - ballA.y;
+            const distSq = dx*dx + dy*dy;
+            const minDist = ballA.radius + ballB.radius;
+            
+            // Check Collision
+            if (distSq < minDist * minDist) {
+                
+                // --- MERGE LOGIC ---
+                if (ballA.value === ballB.value) {
+                    ballA.isDead = true;
+                    ballB.isDead = true;
+
+                    // Calculate new properties
+                    const newVal = ballA.value + 1;
+                    
+                    // --- OBJECTIVE CHECK (ASCENSION) ---
+                    if (newVal > 11) {
+                        // Max Level Reached!
+                        // They clear, giving space, and you get points.
+                        triggerAscension();
+                        return; 
+                    }
+
+                    const newRad = MIN_BALL_SIZE + (newVal - 1) * 7;
+                    const newColor = BALL_COLORS[(newVal - 1) % BALL_COLORS.length];
+                    const midX = (ballA.x + ballB.x) / 2;
+                    const midY = (ballA.y + ballB.y) / 2;
+
+                    const newBall = new Ball(
+                        midX, midY, 
+                        Math.min(newRad, 140), 
+                        newVal, newColor
+                    );
+                    newBall.vy = -2; // Pop up
+                    
+                    balls.push(newBall);
+
+                    score += Math.pow(2, newVal) * 10;
+                    scoreElement.textContent = score;
+                    checkHighScore();
+                    
+                    return; 
+                }
+
+                // --- BOUNCE LOGIC ---
+                const dist = Math.sqrt(distSq);
+                if (dist === 0) return; 
+
+                const overlap = minDist - dist;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                
+                const totalMass = ballA.mass + ballB.mass;
+                const ratioA = ballB.mass / totalMass;
+                const ratioB = ballA.mass / totalMass;
+
+                ballA.x -= overlap * nx * ratioA;
+                ballA.y -= overlap * ny * ratioA;
+                ballB.x += overlap * nx * ratioB;
+                ballB.y += overlap * ny * ratioB;
+
+                const rVx = ballB.vx - ballA.vx;
+                const rVy = ballB.vy - ballA.vy;
+                const velAlongNormal = rVx * nx + rVy * ny;
+
+                if (velAlongNormal > 0) return;
+
+                const restitution = 0.2; 
+                let j = -(1 + restitution) * velAlongNormal;
+                j /= (1 / ballA.mass + 1 / ballB.mass);
+
+                const impulseX = j * nx;
+                const impulseY = j * ny;
+
+                ballA.vx -= impulseX / ballA.mass;
+                ballA.vy -= impulseY / ballA.mass;
+                ballB.vx += impulseX / ballB.mass;
+                ballB.vy += impulseY / ballB.mass;
+            }
+        }
+
+        // --- INPUT HANDLING ---
+
+        function updateDropPosition(clientX) {
+            const rect = canvas.getBoundingClientRect();
+            // Scale input to match canvas coordinate system
+            let x = (clientX - rect.left) * (canvas.width / rect.width / dpr);
+            x = Math.max(MIN_BALL_SIZE, Math.min(WIDTH - MIN_BALL_SIZE, x));
+            dropX = x;
+        }
+
+        // Mouse Events
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDropping) return;
+            updateDropPosition(e.clientX);
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (isDropping || !currentDroppableBall) return;
+            dropBall();
+        });
+
+        // Touch Events (Fixed Logic)
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Stop scrolling
+            if (isDropping) return;
+            isTouching = true;
+            updateDropPosition(e.touches[0].clientX);
+        }, {passive: false});
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (isDropping || !isTouching) return;
+            updateDropPosition(e.touches[0].clientX);
+        }, {passive: false});
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isDropping || !isTouching) return;
+            isTouching = false;
+            // Only drop if we were actually aiming
+            if (currentDroppableBall) dropBall();
+        });
+
+        function dropBall() {
+            isDropping = true;
+            currentDroppableBall.isDroppable = false;
+            currentDroppableBall.vy = 8;
+            currentDroppableBall = null;
+
+            setTimeout(() => {
+                createDroppableBall();
+                isDropping = false;
+            }, 600);
+        }
+
+        // --- GAME LOOP ---
+        function gameLoop() {
+            ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+            // Aim Line
+            if (currentDroppableBall) {
+                ctx.beginPath();
+                ctx.moveTo(currentDroppableBall.x, currentDroppableBall.y);
+                ctx.lineTo(currentDroppableBall.x, HEIGHT);
+                ctx.strokeStyle = '#ddd';
+                ctx.setLineDash([6, 6]);
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Sub-stepped Physics
+            for (let s = 0; s < PHYSICS_SUBSTEPS; s++) {
+                balls.forEach(b => b.stepMovement());
+                for (let i = 0; i < balls.length; i++) {
+                    for (let j = i + 1; j < balls.length; j++) {
+                        if (balls[i].isDroppable || balls[j].isDroppable) continue;
+                        resolveInteraction(balls[i], balls[j]);
+                    }
+                }
+            }
+
+            // Cleanup
+            balls = balls.filter(b => !b.isDead);
+
+            // Render
+            balls.forEach(b => {
+                b.applyFriction();
+                b.draw();
+            });
+
+            // Game Over Line & Logic
+            const deadLineY = 100;
+            if (balls.some(b => !b.isDroppable && b.y < 200)) {
+                ctx.beginPath();
+                ctx.moveTo(0, deadLineY);
+                ctx.lineTo(WIDTH, deadLineY);
+                ctx.strokeStyle = 'rgba(231, 76, 60, 0.5)'; // Warning Red
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            if (balls.some(b => !b.isDroppable && b.y + b.radius < deadLineY && Math.abs(b.vy) < 0.2)) {
+                ctx.fillStyle = 'rgba(44, 62, 80, 0.9)';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 40px Segoe UI';
+                ctx.fillText('GAME OVER', WIDTH/2, HEIGHT/2 - 20);
+                ctx.font = '20px Segoe UI';
+                ctx.fillText(`Final Score: ${score}`, WIDTH/2, HEIGHT/2 + 30);
+                
+                // Click to restart logic can go here
+                canvas.addEventListener('mousedown', () => location.reload(), {once:true});
+                canvas.addEventListener('touchstart', () => location.reload(), {once:true});
+                return;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- STARTUP ---
+        updateNextBallPreview();
+        createDroppableBall();
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>
