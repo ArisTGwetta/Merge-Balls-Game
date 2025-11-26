@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Merge Balls: Ascension</title>
+    <title>Merge Balls: Ascension v4</title>
     <style>
         body {
             display: flex;
@@ -36,6 +36,7 @@
         #header {
             display: flex;
             justify-content: space-between;
+            align-items: center; /* Center items vertically */
             width: 100%;
             margin-bottom: 10px;
             padding: 0 10px;
@@ -46,6 +47,10 @@
             display: flex;
             flex-direction: column;
             align-items: flex-start;
+        }
+
+        .score-box:last-of-type {
+            align-items: flex-end; /* Align Best Score to the right */
         }
 
         .label {
@@ -61,6 +66,10 @@
             color: #2c3e50;
             font-weight: 800;
         }
+        
+        #best-score-box .value {
+            color: #3498db; /* Blue for Best Score */
+        }
 
         #next-container {
             display: flex;
@@ -71,7 +80,6 @@
         #next-ball-preview {
             width: 35px;
             height: 35px;
-            background-color: #ccc; 
             border: 2px solid rgba(0,0,0,0.1);
             border-radius: 50%;
             display: flex;
@@ -82,6 +90,7 @@
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             font-weight: bold;
             text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            transition: all 0.2s ease;
         }
 
         #game-canvas {
@@ -97,12 +106,14 @@
 
         /* Flash animation for "Ascension" */
         @keyframes flash {
-            0% { background-color: #fff; }
-            50% { background-color: #2ecc71; } /* Success Green */
-            100% { background-color: #fff; }
+            0% { background-color: #ecf0f1; }
+            25% { background-color: #2ecc71; } /* Success Green */
+            50% { background-color: #ecf0f1; }
+            75% { background-color: #2ecc71; }
+            100% { background-color: #ecf0f1; }
         }
         .flash-effect {
-            animation: flash 0.5s ease-out;
+            animation: flash 0.6s ease-out;
         }
 
     </style>
@@ -115,13 +126,13 @@
                 <span class="label">Score</span>
                 <span id="current-score" class="value">0</span>
             </div>
-            <div class="score-box">
-                <span class="label">Best</span>
-                <span id="best-score" class="value">0</span>
-            </div>
             <div id="next-container">
                 <div id="next-ball-preview"></div>
-                <span class="label" style="font-size: 10px; margin-top:2px;">Next</span>
+                <span class="label" style="font-size: 10px; margin-top:2px;">Next Drop</span>
+            </div>
+            <div class="score-box" id="best-score-box">
+                <span class="label">Best</span>
+                <span id="best-score" class="value">0</span>
             </div>
         </div>
 
@@ -137,11 +148,12 @@
         const FRICTION = 0.96; 
         const WALL_BOUNCE = 0.4;
         const PHYSICS_SUBSTEPS = 8; 
+        const ASCENSION_TARGET_VALUE = 11; // The value that triggers board clear (Dark Green Ball)
 
         // 11 Colors (1-11)
         const BALL_COLORS = [
             '#FF4D4D', '#FF9F43', '#FDCB6E', '#00D2D3', '#54A0FF', 
-            '#5F27CD', '#FF9FF3', '#D980FA', '#B53471', '#C4E538', '#2ecc71'
+            '#5F27CD', '#FF9FF3', '#D980FA', '#B53471', '#C4E538', '#2ecc71' // <-- Target color
         ];
 
         // --- SETUP ---
@@ -278,12 +290,19 @@
         }
 
         function triggerAscension() {
-            // Visual Flair
-            canvas.style.backgroundColor = '#d5f5e3'; // Light green tint
-            setTimeout(() => canvas.style.backgroundColor = '#fff', 300);
+            // 1. Visual Flair (The "Level Cleared" Flash)
+            container.classList.add('flash-effect'); 
+            setTimeout(() => container.classList.remove('flash-effect'), 600);
             
-            // Bonus Score
-            score += 5000;
+            // 2. Remove all large balls (Ball 11/12) to clear space
+            balls.forEach(ball => {
+                if (ball.value >= ASCENSION_TARGET_VALUE) {
+                    ball.isDead = true;
+                }
+            });
+
+            // 3. Bonus Score
+            score += 10000; // Large bonus for reaching the target
             scoreElement.textContent = score;
             checkHighScore();
         }
@@ -312,13 +331,11 @@
                     ballA.isDead = true;
                     ballB.isDead = true;
 
-                    // Calculate new properties
                     const newVal = ballA.value + 1;
                     
-                    // --- OBJECTIVE CHECK (ASCENSION) ---
-                    if (newVal > 11) {
-                        // Max Level Reached!
-                        // They clear, giving space, and you get points.
+                    // --- FIX HERE: OBJECTIVE CHECK (ASCENSION) ---
+                    // Trigger Ascension if the new ball is 11 or higher.
+                    if (newVal >= ASCENSION_TARGET_VALUE) {
                         triggerAscension();
                         return; 
                     }
@@ -333,7 +350,7 @@
                         Math.min(newRad, 140), 
                         newVal, newColor
                     );
-                    newBall.vy = -2; // Pop up
+                    newBall.vy = -2; // Pop up slightly
                     
                     balls.push(newBall);
 
@@ -348,6 +365,7 @@
                 const dist = Math.sqrt(distSq);
                 if (dist === 0) return; 
 
+                // ... (Physics collision resolution remains the same)
                 const overlap = minDist - dist;
                 const nx = dx / dist;
                 const ny = dy / dist;
@@ -387,7 +405,8 @@
             const rect = canvas.getBoundingClientRect();
             // Scale input to match canvas coordinate system
             let x = (clientX - rect.left) * (canvas.width / rect.width / dpr);
-            x = Math.max(MIN_BALL_SIZE, Math.min(WIDTH - MIN_BALL_SIZE, x));
+            // Clamp X position to prevent balls from spawning half outside
+            x = Math.max(nextBallConfig.radius, Math.min(WIDTH - nextBallConfig.radius, x));
             dropX = x;
         }
 
@@ -402,9 +421,9 @@
             dropBall();
         });
 
-        // Touch Events (Fixed Logic)
+        // Touch Events (Drag & Release Logic)
         canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // Stop scrolling
+            e.preventDefault(); 
             if (isDropping) return;
             isTouching = true;
             updateDropPosition(e.touches[0].clientX);
@@ -420,7 +439,6 @@
             e.preventDefault();
             if (isDropping || !isTouching) return;
             isTouching = false;
-            // Only drop if we were actually aiming
             if (currentDroppableBall) dropBall();
         });
 
@@ -442,10 +460,13 @@
 
             // Aim Line
             if (currentDroppableBall) {
+                // Ensure the currentDroppableBall's visual X position is updated based on dropX
+                currentDroppableBall.x += (dropX - currentDroppableBall.x) * 0.2;
+                
                 ctx.beginPath();
                 ctx.moveTo(currentDroppableBall.x, currentDroppableBall.y);
                 ctx.lineTo(currentDroppableBall.x, HEIGHT);
-                ctx.strokeStyle = '#ddd';
+                ctx.strokeStyle = 'rgba(52, 73, 94, 0.4)'; // Darker aiming line
                 ctx.setLineDash([6, 6]);
                 ctx.lineWidth = 2;
                 ctx.stroke();
@@ -463,7 +484,7 @@
                 }
             }
 
-            // Cleanup
+            // Cleanup dead balls after physics and merging
             balls = balls.filter(b => !b.isDead);
 
             // Render
@@ -472,21 +493,24 @@
                 b.draw();
             });
 
-            // Game Over Line & Logic
+            // Game Over Line & Logic (Dead Line is at Y=100)
             const deadLineY = 100;
-            if (balls.some(b => !b.isDroppable && b.y < 200)) {
+            const isNearGameOver = balls.some(b => !b.isDroppable && b.y < 200);
+
+            if (isNearGameOver) {
                 ctx.beginPath();
                 ctx.moveTo(0, deadLineY);
                 ctx.lineTo(WIDTH, deadLineY);
-                ctx.strokeStyle = 'rgba(231, 76, 60, 0.5)'; // Warning Red
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
+                ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)'; // Warning Red
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 8]);
                 ctx.stroke();
                 ctx.setLineDash([]);
             }
 
             if (balls.some(b => !b.isDroppable && b.y + b.radius < deadLineY && Math.abs(b.vy) < 0.2)) {
-                ctx.fillStyle = 'rgba(44, 62, 80, 0.9)';
+                // Game Over state
+                ctx.fillStyle = 'rgba(44, 62, 80, 0.95)';
                 ctx.fillRect(0, 0, WIDTH, HEIGHT);
                 ctx.fillStyle = '#fff';
                 ctx.textAlign = 'center';
@@ -495,9 +519,10 @@
                 ctx.font = '20px Segoe UI';
                 ctx.fillText(`Final Score: ${score}`, WIDTH/2, HEIGHT/2 + 30);
                 
-                // Click to restart logic can go here
-                canvas.addEventListener('mousedown', () => location.reload(), {once:true});
-                canvas.addEventListener('touchstart', () => location.reload(), {once:true});
+                // Restart listener
+                const restartHandler = () => location.reload();
+                canvas.addEventListener('mousedown', restartHandler, {once:true});
+                canvas.addEventListener('touchstart', restartHandler, {once:true});
                 return;
             }
 
