@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- Viewport settings are correct for mobile responsiveness -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Merge Balls: Ascension v4</title>
     <style>
@@ -25,8 +26,13 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
             border-radius: 12px;
             padding: 20px;
-            width: 400px; 
-            height: 700px; 
+            /* === RESPONSIVENESS FIXES START HERE === */
+            /* Use min() to take 95% of viewport width, but max 400px */
+            width: min(95vw, 400px); 
+            height: auto; /* Let the aspect-ratio and padding define height */
+            /* Maintain the overall 400:700 (4:7) aspect ratio */
+            aspect-ratio: 4 / 7; 
+            /* === RESPONSIVENESS FIXES END HERE === */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -36,7 +42,7 @@
         #header {
             display: flex;
             justify-content: space-between;
-            align-items: center; /* Center items vertically */
+            align-items: center;
             width: 100%;
             margin-bottom: 10px;
             padding: 0 10px;
@@ -50,7 +56,7 @@
         }
 
         .score-box:last-of-type {
-            align-items: flex-end; /* Align Best Score to the right */
+            align-items: flex-end;
         }
 
         .label {
@@ -68,7 +74,7 @@
         }
         
         #best-score-box .value {
-            color: #3498db; /* Blue for Best Score */
+            color: #3498db;
         }
 
         #next-container {
@@ -100,8 +106,14 @@
             border-bottom-left-radius: 8px;
             border-bottom-right-radius: 8px;
             cursor: crosshair;
-            width: 400px;
-            height: 600px;
+            /* === RESPONSIVENESS FIXES START HERE === */
+            /* Take 100% of the fluid container width */
+            width: 100%; 
+            /* Calculate height based on container, accounting for 100px header height */
+            height: calc(100% - 100px); 
+            /* The fixed internal constants (400x600) handle the drawing, 
+               and the CSS scales the physical size. */
+            /* === RESPONSIVENESS FIXES END HERE === */
         }
 
         /* Flash animation for "Ascension" */
@@ -141,6 +153,8 @@
 
     <script>
         // --- CONFIGURATION ---
+        // These constants define the *internal* coordinate system for physics and drawing (0 to 400 on X, 0 to 600 on Y).
+        // The CSS now handles the physical size scaling.
         const WIDTH = 400;
         const HEIGHT = 600;
         const MIN_BALL_SIZE = 20;
@@ -169,8 +183,8 @@
         canvas.width = WIDTH * dpr;
         canvas.height = HEIGHT * dpr;
         ctx.scale(dpr, dpr);
-        canvas.style.width = `${WIDTH}px`;
-        canvas.style.height = `${HEIGHT}px`;
+        // *** REMOVED: canvas.style.width and canvas.style.height assignments ***
+        // *** The physical size is now controlled solely by CSS for responsiveness. ***
 
         // --- STATE ---
         let balls = [];
@@ -333,7 +347,6 @@
 
                     const newVal = ballA.value + 1;
                     
-                    // --- FIX HERE: OBJECTIVE CHECK (ASCENSION) ---
                     // Trigger Ascension if the new ball is 11 or higher.
                     if (newVal >= ASCENSION_TARGET_VALUE) {
                         triggerAscension();
@@ -403,8 +416,12 @@
 
         function updateDropPosition(clientX) {
             const rect = canvas.getBoundingClientRect();
-            // Scale input to match canvas coordinate system
-            let x = (clientX - rect.left) * (canvas.width / rect.width / dpr);
+            // Calculate a scale factor based on the physical size of the canvas vs. the internal size (400)
+            const scaleFactor = WIDTH / rect.width;
+
+            // Scale input to match internal canvas coordinate system
+            let x = (clientX - rect.left) * scaleFactor;
+            
             // Clamp X position to prevent balls from spawning half outside
             x = Math.max(nextBallConfig.radius, Math.min(WIDTH - nextBallConfig.radius, x));
             dropX = x;
@@ -528,6 +545,19 @@
 
             requestAnimationFrame(gameLoop);
         }
+        
+        // --- RESIZE HANDLER (New for better mobile adaptation) ---
+        function handleResize() {
+            // Read the actual computed physical size of the canvas element from the CSS
+            const rect = canvas.getBoundingClientRect();
+            
+            // Because the internal coordinate system (WIDTH=400, HEIGHT=600) is fixed, 
+            // the drawing engine automatically scales it to fit the new rect.width/height
+            // We only need to ensure the Input Handling uses the correct scale factor.
+        }
+
+        window.addEventListener('resize', handleResize);
+
 
         // --- STARTUP ---
         updateNextBallPreview();
