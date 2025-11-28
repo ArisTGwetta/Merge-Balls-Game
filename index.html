@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Merge Balls: Ascension v6</title>
+    <title>Merge Balls: Ascension v7</title>
     <style>
         body {
             display: flex;
@@ -33,14 +33,11 @@
             /* === VERTICAL RESPONSIVENESS FIXES START HERE === */
             width: clamp(280px, 95vw, 400px); 
             
-            /* Aggressively reduced to 85vh to guarantee a 15% safety margin against browser UI bars */
-            height: 85vh; 
+            /* Back to 90vh, relying on canvas CSS/JS to fix stretching */
+            height: 90vh; 
             max-height: 700px; 
-            min-height: 480px; /* Slight reduction on min height for safety */
+            min-height: 500px; 
             
-            flex-grow: 1; 
-            /* === VERTICAL RESPONSIVENESS FIXES END HERE === */
-
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -122,7 +119,11 @@
             cursor: crosshair;
             
             width: 100%; 
-            flex-grow: 1; 
+            
+            /* FIX 1: Prevent stretching and allow margins to center the canvas */
+            flex-grow: 0; 
+            margin: auto 0; 
+            
             min-height: 300px; 
         }
 
@@ -179,7 +180,6 @@
         ];
 
         // --- SETUP ---
-        // Ensure ctx is initialized within window.onload for reliability
         let ctx = null; 
         const container = document.getElementById('game-container');
         const canvas = document.getElementById('game-canvas');
@@ -454,7 +454,6 @@
         });
 
         function dropBall() {
-            // FIX 2: Removed setTimeout to ensure reliable and immediate touch interaction
             isDropping = true;
             currentDroppableBall.isDroppable = false;
             currentDroppableBall.vy = 8;
