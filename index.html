@@ -17,8 +17,8 @@
             user-select: none;
             overflow: hidden; /* Prevent body scroll */
             touch-action: none;
-            padding-top: 5px; /* Add a little padding at the top */
-            padding-bottom: 5px; /* Add a little padding at the bottom */
+            padding-top: 10px; /* Increased buffer */
+            padding-bottom: 10px; /* Increased buffer */
             box-sizing: border-box; /* Include padding in height calculations */
         }
 
@@ -35,10 +35,8 @@
             /* Use clamp to manage game container size */
             width: clamp(280px, 95vw, 400px); /* Min 280px, max 400px, responsive to 95% viewport width */
             
-            /* Calculate height based on available vertical space, keeping aspect ratio */
-            /* This is more complex because of dynamic browser UI. */
-            /* We'll use JS to adjust height for the game-canvas itself. */
-            height: calc(100vh - 20px); /* Take up almost all viewport height, leaving small margin */
+            /* Reduced to 95vh to provide a larger safety margin against browser UI bars */
+            height: 95vh; 
             max-height: 700px; /* Max height for very tall screens */
             /* Min-height to ensure it doesn't disappear on tiny screens */
             min-height: 500px; 
@@ -186,4 +184,419 @@
 
         // 11 Colors (1-11)
         const BALL_COLORS = [
-            '
+            '#FF4D4D', '#FF9F43', '#FDCB6E', '#00D2D3', '#54A0FF', 
+            '#5F27CD', '#FF9FF3', '#D980FA', '#B53471', '#C4E538', '#2ecc71' // <-- Target color
+        ];
+
+        // --- SETUP ---
+        const container = document.getElementById('game-container');
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('current-score');
+        const bestScoreElement = document.getElementById('best-score');
+        const nextBallElement = document.getElementById('next-ball-preview');
+        const headerElement = document.getElementById('header');
+
+
+        // High DPI Scaling
+        const dpr = window.devicePixelRatio || 1;
+        // Canvas internal dimensions are now set by JS on resize to match aspect ratio
+        // and its *physical* size is set by CSS.
+        // The drawing context scales to fit the internal dimensions.
+        // ctx.scale(dpr, dpr); <-- This happens in handleResize initially and on subsequent resizes
+
+        // --- STATE ---
+        let balls = [];
+        let score = 0;
+        let highScore = localStorage.getItem('mergeBallsBest') || 0;
+        let isDropping = false;
+        let dropX = INTERNAL_GAME_WIDTH / 2; // Use internal width for drop position
+        let currentDroppableBall = null;
+        let isTouching = false; // Track touch state
+
+        // Initialize UI
+        bestScoreElement.textContent = highScore;
+
+        // --- CLASS ---
+        class Ball {
+            constructor(x, y, radius, value, color) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.value = value;
+                this.color = color;
+                this.vx = 0;
+                this.vy = 0;
+                this.mass = radius * 1.5;
+                this.isDroppable = false;
+                this.isDead = false;
+            }
+
+            draw() {
+                if (this.isDead) return;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = `bold ${Math.max(12, Math.floor(this.radius * 0.8))}px Arial`;
+                ctx.shadowColor = "rgba(0,0,0,0.3)";
+                ctx.shadowBlur = 3;
+                ctx.fillText(this.value, this.x, this.y);
+                ctx.shadowBlur = 0;
+            }
+
+            stepMovement() {
+                if (this.isDead) return;
+                
+                if (this.isDroppable) {
+                    this.x += (dropX - this.x) * 0.2;
+                } else {
+                    this.vy += GRAVITY / PHYSICS_SUBSTEPS;
+                    this.x += this.vx / PHYSICS_SUBSTEPS;
+                    this.y += this.vy / PHYSICS_SUBSTEPS;
+                    this.handleWallCollisions();
+                }
+            }
+
+            applyFriction() {
+                if (!this.isDroppable && !this.isDead) {
+                    this.vx *= FRICTION;
+                    this.vy *= FRICTION;
+                }
+            }
+
+            handleWallCollisions() {
+                // Use INTERNAL_GAME_WIDTH and INTERNAL_GAME_HEIGHT for physics bounds
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx = -Math.abs(this.vx) * WALL_BOUNCE;
+                }
+                if (this.x + this.radius > INTERNAL_GAME_WIDTH) {
+                    this.x = INTERNAL_GAME_WIDTH - this.radius;
+                    this.vx = Math.abs(this.vx) * -WALL_BOUNCE;
+                }
+                if (this.y + this.radius > INTERNAL_GAME_HEIGHT) {
+                    this.y = INTERNAL_GAME_HEIGHT - this.radius;
+                    this.vy = Math.abs(this.vy) * -WALL_BOUNCE;
+                    if (Math.abs(this.vy) < 0.5) this.vy = 0;
+                    if (Math.abs(this.vx) < 0.1) this.vx = 0;
+                }
+            }
+        }
+
+        // --- HELPERS ---
+
+        function generateRandomBallConfig() {
+            const randomValue = Math.floor(Math.random() * 3) + 1;
+            const radius = MIN_BALL_SIZE + (randomValue - 1) * 7;
+            const color = BALL_COLORS[(randomValue - 1) % BALL_COLORS.length];
+            return { value: randomValue, radius: radius, color: color };
+        }
+
+        let nextBallConfig = generateRandomBallConfig();
+
+        function createDroppableBall() {
+            currentDroppableBall = new Ball(
+                dropX, 50, 
+                nextBallConfig.radius,
+                nextBallConfig.value,
+                nextBallConfig.color
+            );
+            currentDroppableBall.isDroppable = true;
+            balls.push(currentDroppableBall);
+            nextBallConfig = generateRandomBallConfig();
+            updateNextBallPreview();
+        }
+
+        function updateNextBallPreview() {
+            nextBallElement.style.backgroundColor = nextBallConfig.color;
+            nextBallElement.textContent = nextBallConfig.value;
+        }
+
+        function triggerAscension() {
+            container.classList.add('flash-effect'); 
+            setTimeout(() => container.classList.remove('flash-effect'), 600);
+            
+            balls.forEach(ball => {
+                if (ball.value >= ASCENSION_TARGET_VALUE) {
+                    ball.isDead = true;
+                }
+            });
+
+            score += 10000;
+            scoreElement.textContent = score;
+            checkHighScore();
+        }
+
+        function checkHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                bestScoreElement.textContent = highScore;
+                localStorage.setItem('mergeBallsBest', highScore);
+            }
+        }
+
+        function resolveInteraction(ballA, ballB) {
+            if (ballA.isDead || ballB.isDead) return;
+
+            const dx = ballB.x - ballA.x;
+            const dy = ballB.y - ballA.y;
+            const distSq = dx*dx + dy*dy;
+            const minDist = ballA.radius + ballB.radius;
+            
+            if (distSq < minDist * minDist) {
+                if (ballA.value === ballB.value) {
+                    ballA.isDead = true;
+                    ballB.isDead = true;
+
+                    const newVal = ballA.value + 1;
+                    
+                    if (newVal >= ASCENSION_TARGET_VALUE) {
+                        triggerAscension();
+                        return; 
+                    }
+
+                    const newRad = MIN_BALL_SIZE + (newVal - 1) * 7;
+                    const newColor = BALL_COLORS[(newVal - 1) % BALL_COLORS.length];
+                    const midX = (ballA.x + ballB.x) / 2;
+                    const midY = (ballA.y + ballB.y) / 2;
+
+                    const newBall = new Ball(
+                        midX, midY, 
+                        Math.min(newRad, 140), 
+                        newVal, newColor
+                    );
+                    newBall.vy = -2;
+                    
+                    balls.push(newBall);
+
+                    score += Math.pow(2, newVal) * 10;
+                    scoreElement.textContent = score;
+                    checkHighScore();
+                    
+                    return; 
+                }
+
+                const dist = Math.sqrt(distSq);
+                if (dist === 0) return; 
+
+                const overlap = minDist - dist;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                
+                const totalMass = ballA.mass + ballB.mass;
+                const ratioA = ballB.mass / totalMass;
+                const ratioB = ballA.mass / totalMass;
+
+                ballA.x -= overlap * nx * ratioA;
+                ballA.y -= overlap * ny * ratioA;
+                ballB.x += overlap * nx * ratioB;
+                ballB.y += overlap * ny * ratioB;
+
+                const rVx = ballB.vx - ballA.vx;
+                const rVy = ballB.vy - ballA.vy;
+                const velAlongNormal = rVx * nx + rVy * ny;
+
+                if (velAlongNormal > 0) return;
+
+                const restitution = 0.2; 
+                let j = -(1 + restitution) * velAlongNormal;
+                j /= (1 / ballA.mass + 1 / ballB.mass);
+
+                const impulseX = j * nx;
+                const impulseY = j * ny;
+
+                ballA.vx -= impulseX / ballA.mass;
+                ballA.vy -= impulseY / ballA.mass;
+                ballB.vx += impulseX / ballB.mass;
+                ballB.vy += impulseY / ballB.mass;
+            }
+        }
+
+        // --- INPUT HANDLING ---
+
+        function updateDropPosition(clientX) {
+            const rect = canvas.getBoundingClientRect();
+            // Calculate scale factor based on actual canvas physical width and internal game width
+            const scaleFactor = INTERNAL_GAME_WIDTH / rect.width;
+
+            let x = (clientX - rect.left) * scaleFactor;
+            
+            x = Math.max(nextBallConfig.radius, Math.min(INTERNAL_GAME_WIDTH - nextBallConfig.radius, x));
+            dropX = x;
+        }
+
+        // Mouse Events
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDropping) return;
+            updateDropPosition(e.clientX);
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (isDropping || !currentDroppableBall) return;
+            dropBall();
+        });
+
+        // Touch Events (Drag & Release Logic)
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); 
+            if (isDropping) return;
+            isTouching = true;
+            updateDropPosition(e.touches[0].clientX);
+        }, {passive: false});
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (isDropping || !isTouching) return;
+            updateDropPosition(e.touches[0].clientX);
+        }, {passive: false});
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isDropping || !isTouching) return;
+            isTouching = false;
+            if (currentDroppableBall) dropBall();
+        });
+
+        function dropBall() {
+            isDropping = true;
+            currentDroppableBall.isDroppable = false;
+            currentDroppableBall.vy = 8;
+            currentDroppableBall = null;
+
+            setTimeout(() => {
+                createDroppableBall();
+                isDropping = false;
+            }, 600);
+        }
+
+        // --- GAME LOOP ---
+        function gameLoop() {
+            ctx.clearRect(0, 0, INTERNAL_GAME_WIDTH, INTERNAL_GAME_HEIGHT);
+
+            // Aim Line
+            if (currentDroppableBall) {
+                currentDroppableBall.x += (dropX - currentDroppableBall.x) * 0.2;
+                
+                ctx.beginPath();
+                ctx.moveTo(currentDroppableBall.x, currentDroppableBall.y);
+                ctx.lineTo(currentDroppableBall.x, INTERNAL_GAME_HEIGHT);
+                ctx.strokeStyle = 'rgba(52, 73, 94, 0.4)';
+                ctx.setLineDash([6, 6]);
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Sub-stepped Physics
+            for (let s = 0; s < PHYSICS_SUBSTEPS; s++) {
+                balls.forEach(b => b.stepMovement());
+                for (let i = 0; i < balls.length; i++) {
+                    for (let j = i + 1; j < balls.length; j++) {
+                        if (balls[i].isDroppable || balls[j].isDroppable) continue;
+                        resolveInteraction(balls[i], balls[j]);
+                    }
+                }
+            }
+
+            balls = balls.filter(b => !b.isDead);
+
+            balls.forEach(b => {
+                b.applyFriction();
+                b.draw();
+            });
+
+            // Game Over Line & Logic (Dead Line is at Y=100)
+            const deadLineY = 100;
+            const isNearGameOver = balls.some(b => !b.isDroppable && b.y < 200);
+
+            if (isNearGameOver) {
+                ctx.beginPath();
+                ctx.moveTo(0, deadLineY);
+                ctx.lineTo(INTERNAL_GAME_WIDTH, deadLineY);
+                ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 8]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            if (balls.some(b => !b.isDroppable && b.y + b.radius < deadLineY && Math.abs(b.vy) < 0.2)) {
+                // Game Over state
+                ctx.fillStyle = 'rgba(44, 62, 80, 0.95)';
+                ctx.fillRect(0, 0, INTERNAL_GAME_WIDTH, INTERNAL_GAME_HEIGHT);
+                ctx.fillStyle = '#fff';
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 40px Segoe UI';
+                ctx.fillText('GAME OVER', INTERNAL_GAME_WIDTH/2, INTERNAL_GAME_HEIGHT/2 - 20);
+                ctx.font = '20px Segoe UI';
+                ctx.fillText(`Final Score: ${score}`, INTERNAL_GAME_WIDTH/2, INTERNAL_GAME_HEIGHT/2 + 30);
+                
+                const restartHandler = () => location.reload();
+                canvas.addEventListener('mousedown', restartHandler, {once:true});
+                canvas.addEventListener('touchstart', restartHandler, {once:true});
+                return;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // --- RESIZE HANDLER (Crucial for vertical responsiveness) ---
+        function handleResize() {
+            // Get the computed physical width of the canvas
+            const containerRect = container.getBoundingClientRect();
+            const headerHeight = headerElement.getBoundingClientRect().height;
+
+            // Calculate available height for the canvas within the container
+            // Subtract header height and container's top/bottom padding (2 * 10px from #game-container padding)
+            const availableCanvasHeight = containerRect.height - headerHeight - (2 * 10); 
+            const desiredCanvasWidth = containerRect.width - (2 * 10); // Subtract container's left/right padding
+
+            // Calculate aspect ratios
+            const gameAspectRatio = INTERNAL_GAME_WIDTH / INTERNAL_GAME_HEIGHT; // 400 / 600 = 0.666...
+            const currentContainerAspectRatio = desiredCanvasWidth / availableCanvasHeight;
+
+            let finalCanvasWidth = desiredCanvasWidth;
+            let finalCanvasHeight = availableCanvasHeight;
+
+            // Adjust to fit within the container while maintaining aspect ratio
+            if (currentContainerAspectRatio > gameAspectRatio) {
+                // Container is wider than game, constrain by height
+                finalCanvasWidth = availableCanvasHeight * gameAspectRatio;
+                finalCanvasHeight = availableCanvasHeight;
+            } else {
+                // Container is taller than game, constrain by width
+                finalCanvasHeight = desiredCanvasWidth / gameAspectRatio;
+                finalCanvasWidth = desiredCanvasWidth;
+            }
+            
+            // Set the *physical* CSS dimensions of the canvas element
+            canvas.style.width = `${finalCanvasWidth}px`;
+            canvas.style.height = `${finalCanvasHeight}px`;
+
+            // Set the *internal drawing* dimensions of the canvas context
+            // These should always match INTERNAL_GAME_WIDTH and INTERNAL_GAME_HEIGHT
+            canvas.width = INTERNAL_GAME_WIDTH * dpr;
+            canvas.height = INTERNAL_GAME_HEIGHT * dpr;
+            ctx.scale(dpr, dpr); // Apply DPR scaling once
+        }
+
+        window.addEventListener('resize', handleResize);
+
+
+        // --- STARTUP ---
+        handleResize(); // Call once at start to set initial canvas size
+        updateNextBallPreview();
+        createDroppableBall();
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>
