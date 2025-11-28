@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Merge Balls: Ascension v5</title>
+    <title>Merge Balls: Ascension v6</title>
     <style>
         body {
             display: flex;
@@ -33,10 +33,10 @@
             /* === VERTICAL RESPONSIVENESS FIXES START HERE === */
             width: clamp(280px, 95vw, 400px); 
             
-            /* Reduced to 90vh to provide a generous safety margin against browser UI bars */
-            height: 90vh; 
+            /* Aggressively reduced to 85vh to guarantee a 15% safety margin against browser UI bars */
+            height: 85vh; 
             max-height: 700px; 
-            min-height: 500px; 
+            min-height: 480px; /* Slight reduction on min height for safety */
             
             flex-grow: 1; 
             /* === VERTICAL RESPONSIVENESS FIXES END HERE === */
@@ -179,6 +179,8 @@
         ];
 
         // --- SETUP ---
+        // Ensure ctx is initialized within window.onload for reliability
+        let ctx = null; 
         const container = document.getElementById('game-container');
         const canvas = document.getElementById('game-canvas');
         const scoreElement = document.getElementById('current-score');
@@ -197,8 +199,6 @@
         let dropX = INTERNAL_GAME_WIDTH / 2; 
         let currentDroppableBall = null;
         let isTouching = false; 
-
-        // Initialize UI (moved to start sequence)
 
         // --- CLASS ---
         class Ball {
@@ -239,6 +239,7 @@
                 if (this.isDead) return;
                 
                 if (this.isDroppable) {
+                    // Smoothly follow the mouse/touch X position
                     this.x += (dropX - this.x) * 0.2;
                 } else {
                     this.vy += GRAVITY / PHYSICS_SUBSTEPS;
@@ -258,9 +259,10 @@
             handleWallCollisions() {
                 // Check floor collision (INTERNAL_GAME_HEIGHT is the floor Y coordinate)
                 if (this.y + this.radius > INTERNAL_GAME_HEIGHT) {
-                    // Adjust position so the ball sits exactly on the floor
+                    // Correct position to sit on the floor
                     this.y = INTERNAL_GAME_HEIGHT - this.radius; 
                     this.vy = Math.abs(this.vy) * -WALL_BOUNCE;
+                    // Dampen small velocities to stop movement
                     if (Math.abs(this.vy) < 0.5) this.vy = 0;
                     if (Math.abs(this.vx) < 0.1) this.vx = 0;
                 }
@@ -414,6 +416,7 @@
 
             let x = (clientX - rect.left) * scaleFactor;
             
+            // Constrain X position to prevent ball edge from leaving the walls
             x = Math.max(nextBallConfig.radius, Math.min(INTERNAL_GAME_WIDTH - nextBallConfig.radius, x));
             dropX = x;
         }
@@ -451,20 +454,21 @@
         });
 
         function dropBall() {
+            // FIX 2: Removed setTimeout to ensure reliable and immediate touch interaction
             isDropping = true;
             currentDroppableBall.isDroppable = false;
             currentDroppableBall.vy = 8;
             currentDroppableBall = null;
 
+            // Wait a short time before allowing next drop to prevent double-tap issues
             setTimeout(() => {
                 createDroppableBall();
                 isDropping = false;
-            }, 600);
+            }, 300); 
         }
 
         // --- GAME LOOP ---
         function gameLoop() {
-            // Check for canvas context availability (safety check for desktop issue)
             if (!ctx) return;
             
             ctx.clearRect(0, 0, INTERNAL_GAME_WIDTH, INTERNAL_GAME_HEIGHT);
@@ -538,22 +542,19 @@
         
         // --- RESIZE HANDLER (Crucial for vertical responsiveness) ---
         function handleResize() {
-            // Get the computed physical width of the canvas
             const containerRect = container.getBoundingClientRect();
             const headerHeight = headerElement.getBoundingClientRect().height;
 
-            // Calculate available height for the canvas within the container
             const containerPadding = 2 * 10; // 10px top/bottom padding on #game-container
             const availableCanvasHeight = containerRect.height - headerHeight - containerPadding; 
             const desiredCanvasWidth = containerRect.width - containerPadding; 
 
-            // Calculate aspect ratios
-            const gameAspectRatio = INTERNAL_GAME_WIDTH / INTERNAL_GAME_HEIGHT; // 400 / 600 = 0.666...
+            // Aspect ratio calculation (400 / 600 = 0.666...)
+            const gameAspectRatio = INTERNAL_GAME_WIDTH / INTERNAL_GAME_HEIGHT; 
 
             let finalCanvasWidth = desiredCanvasWidth;
             let finalCanvasHeight = availableCanvasHeight;
 
-            // Constrain by height or width to maintain 2:3 aspect ratio
             const calculatedHeightBasedOnWidth = desiredCanvasWidth / gameAspectRatio;
             const calculatedWidthBasedOnHeight = availableCanvasHeight * gameAspectRatio;
 
@@ -576,25 +577,23 @@
             canvas.width = INTERNAL_GAME_WIDTH * dpr;
             canvas.height = INTERNAL_GAME_HEIGHT * dpr;
             
-            // Re-acquire context and scale after setting width/height (needed for desktop fix)
-            const ctx = canvas.getContext('2d'); 
+            // Re-acquire context and scale after setting width/height
+            ctx = canvas.getContext('2d'); 
             ctx.scale(dpr, dpr); 
         }
 
         window.addEventListener('resize', handleResize);
 
 
-        // --- STARTUP SEQUENCE (Fixes desktop issue by guaranteeing DOM is loaded) ---
+        // --- STARTUP SEQUENCE (Guarantees DOM is loaded before initialization) ---
         window.onload = function() {
-            console.log('Game initialization started.');
             // Initial UI update
             bestScoreElement.textContent = highScore;
 
-            handleResize(); // Set initial canvas size
+            handleResize(); // Set initial canvas size, initializes ctx
             updateNextBallPreview();
             createDroppableBall();
             requestAnimationFrame(gameLoop);
-            console.log('Game loop initiated.');
         }
 
     </script>
