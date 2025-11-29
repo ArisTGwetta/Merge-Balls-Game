@@ -39,17 +39,12 @@
         }
         .message-box {
             /* Ensures message box fills the container exactly */
-            @apply absolute inset-0 bg-gray-900 bg-opacity-95 flex flex-col justify-center items-center text-white p-4 rounded-md cursor-pointer;
+            @apply absolute inset-0 bg-gray-900 bg-opacity-95 flex flex-col justify-center items-center text-white p-4 rounded-md;
             z-index: 100;
             height: 100%; 
             width: 100%;
             box-sizing: border-box;
             border-radius: 4px;
-        }
-        .start-button {
-            /* Compact button style - this button is now just a visual element */
-            @apply mt-4 px-6 py-2 bg-green-500 text-black font-bold text-base rounded-full shadow-lg hover:bg-green-400 transition transform hover:scale-105;
-            pointer-events: none; /* Disable its own click so the parent message-box handles it */
         }
         #game-title {
             /* Fix Title Wrapping: Reduced font size */
@@ -68,6 +63,13 @@
         
         <!-- Score Display -->
         <div id="score-display" class="mt-4 text-xl font-mono text-white">PLAYER: 0 | CPU: 0</div>
+        
+        <!-- Initial Message Box (will disappear on first paddle move) -->
+        <div id="initial-message-box" class="message-box">
+            <h2 class="text-3xl font-extrabold mb-3 text-yellow-400 text-center">Welcome to Pong!</h2>
+            <p class="text-base mb-4 text-center px-2">Move the green paddle (right) to start playing.</p>
+            <p class="text-sm text-gray-400">(First to 5 points wins)</p>
+        </div>
     </div>
 
     <script>
@@ -76,6 +78,7 @@
         const ctx = canvas.getContext('2d');
         const scoreDisplay = document.getElementById('score-display');
         const container = document.getElementById('game-container');
+        const initialMessageBox = document.getElementById('initial-message-box');
         
         // Game Dimensions (Internal Drawing Resolution - 4:3 Aspect Ratio)
         const GAME_WIDTH = 400;
@@ -85,6 +88,7 @@
         // Paddles
         const PADDLE_WIDTH = 10;
         const PADDLE_HEIGHT = 70;
+        const BALL_MARGIN_FROM_PADDLE = PADDLE_WIDTH + 5; // Distance from the paddle edge
         let playerY = (GAME_HEIGHT / 2) - (PADDLE_HEIGHT / 2);
         let cpuY = (GAME_HEIGHT / 2) - (PADDLE_HEIGHT / 2);
         const PADDLE_SPEED = 6;
@@ -99,9 +103,12 @@
         // Game State
         let playerScore = 0;
         let cpuScore = 0;
-        const WINNING_SCORE = 5; // <-- Confirmed: First to 5 wins!
+        const WINNING_SCORE = 5;
         let gameRunning = false;
         let gameOver = false;
+        let isGameStarted = false; 
+        let flashColor = '#000'; 
+        let isScoring = false; 
 
         // --- Core Game Logic (Drawing, Movement, Collision) ---
 
@@ -133,8 +140,8 @@
         }
 
         function drawEverything() {
-            // Background
-            drawRect(0, 0, GAME_WIDTH, GAME_HEIGHT, '#000');
+            // Background - use flashColor here for the effect
+            drawRect(0, 0, GAME_WIDTH, GAME_HEIGHT, flashColor);
             drawNet();
             drawRect(GAME_WIDTH - PADDLE_WIDTH - 20, playerY, PADDLE_WIDTH, PADDLE_HEIGHT, '#10b981'); 
             drawRect(20, cpuY, PADDLE_WIDTH, PADDLE_HEIGHT, '#3b82f6'); 
@@ -151,16 +158,23 @@
         }
 
         function resetBall(servingPlayer) {
-            ballX = GAME_WIDTH / 2;
-            ballY = GAME_HEIGHT / 2;
-            // The ball direction is decided by who scored the last point
-            ballSpeedX = servingPlayer === 'player' ? -5 : 5;
-            ballSpeedY = Math.random() > 0.5 ? 5 : -5;
+            ballY = GAME_HEIGHT / 2; 
+
+            if (servingPlayer === 'player') {
+                // Player scored, Player serves: Ball starts near Player's paddle, heads left (to CPU)
+                ballX = GAME_WIDTH - 20 - PADDLE_WIDTH - BALL_SIZE;
+                ballSpeedX = -Math.abs(ballSpeedX);
+            } else {
+                // CPU scored, CPU serves: Ball starts near CPU's paddle, heads right (to Player)
+                ballX = 20 + PADDLE_WIDTH + BALL_SIZE;
+                ballSpeedX = Math.abs(ballSpeedX);
+            }
+            
+            ballSpeedY = (Math.random() * 4 + 3) * (Math.random() > 0.5 ? 1 : -1); 
         }
         
         function computerMovement() {
             const cpuCenter = cpuY + PADDLE_HEIGHT / 2;
-            // Simple AI that tracks the ball but lags a bit (0.7 speed)
             if (cpuCenter < ballY - 20) {
                 cpuY += PADDLE_SPEED * 0.7;
             } else if (cpuCenter > ballY + 20) {
@@ -170,14 +184,49 @@
             if (cpuY > GAME_HEIGHT - PADDLE_HEIGHT) cpuY = GAME_HEIGHT - PADDLE_HEIGHT;
         }
 
-        function checkCollision() {
-            const playerX = GAME_WIDTH - PADDLE_WIDTH - 20;
+        function handleScore(servingPlayer) {
+            if (isScoring) return; 
+            
+            gameRunning = false; 
+            isScoring = true; 
+            flashColor = '#ffff00'; 
+            drawEverything(); 
+            drawScores(); 
 
+            // Check win condition *after* the score update
+            let gameFinished = playerScore >= WINNING_SCORE || cpuScore >= WINNING_SCORE;
+            
+            // Wait 1000ms (1 second) for visual feedback
+            setTimeout(() => {
+                flashColor = '#000'; 
+                isScoring = false; 
+                
+                if (gameFinished) {
+                    gameOver = true; // Set final game state here
+                    if (playerScore >= WINNING_SCORE) {
+                        displayMessage('You Won!', 'Congratulations! Move the paddle to restart.');
+                    } else { // CPU won
+                        displayMessage('You Lost!', 'Better luck next time. Move the paddle to restart.');
+                    }
+                } else {
+                    // Resume game sequence
+                    resetBall(servingPlayer);
+                    gameRunning = true;
+                    gameLoop();
+                }
+            }, 1000); 
+        }
+
+        function checkCollision() {
+            if (isScoring) return; 
+
+            const playerX = GAME_WIDTH - PADDLE_WIDTH - 20;
+            
             // Player Paddle Collision (right side)
             if (ballX > playerX - BALL_SIZE / 2 && ballX < playerX + PADDLE_WIDTH + BALL_SIZE / 2 && 
                 ballY > playerY && ballY < playerY + PADDLE_HEIGHT) 
             {
-                ballSpeedX = -ballSpeedX;
+                ballSpeedX = -Math.abs(ballSpeedX); // Ensure it moves left
             } 
             
             const cpuX = 20;
@@ -185,80 +234,60 @@
             if (ballX < cpuX + PADDLE_WIDTH + BALL_SIZE / 2 && ballX > cpuX - BALL_SIZE / 2 &&
                 ballY > cpuY && ballY < cpuY + PADDLE_HEIGHT)
             {
-                ballSpeedX = -ballSpeedX;
+                ballSpeedX = Math.abs(ballSpeedX); // Ensure it moves right
             }
 
             // Scoring
-            if (ballX < BALL_SIZE / 2) { // CPU scores
+            if (ballX < BALL_SIZE / 2) { // Player scores on CPU's side (left)
                 playerScore++;
-                checkWinCondition();
-                resetBall('cpu'); 
-            } else if (ballX > GAME_WIDTH - BALL_SIZE / 2) { // Player scores
+                handleScore('player'); // Player serves next
+            } else if (ballX > GAME_WIDTH - BALL_SIZE / 2) { // CPU scores on Player's side (right)
                 cpuScore++;
-                checkWinCondition();
-                resetBall('player'); 
-            }
-        }
-
-        function checkWinCondition() {
-            if (playerScore >= WINNING_SCORE) {
-                gameOver = true;
-                displayMessage('You Won!', 'Congratulations! Tap anywhere to restart.', startGame);
-            } else if (cpuScore >= WINNING_SCORE) {
-                gameOver = true;
-                displayMessage('You Lost!', 'Better luck next time. Tap anywhere to restart.', startGame);
+                handleScore('cpu'); // CPU serves next
             }
         }
 
         function gameLoop() {
-            if (!gameRunning || gameOver) return;
+            // Only draw/run physics if the game is active
+            if (!gameRunning || gameOver) {
+                drawEverything();
+                return; 
+            }
             moveBall();
             computerMovement();
             checkCollision();
             drawEverything();
-            drawScores();
             requestAnimationFrame(gameLoop);
         }
 
         function startGame() {
-            playerScore = 0;
+            isGameStarted = true;
+            if (initialMessageBox) initialMessageBox.classList.add('hidden'); 
+            
+            // This is the ONLY place scores are reset.
+            playerScore = 0; 
             cpuScore = 0;
+            
             gameOver = false;
+            isScoring = false;
             gameRunning = true;
+            flashColor = '#000';
+            
+            // Default first serve is always by the player (moving left)
             resetBall('player');
             drawScores();
             gameLoop();
         }
         
-        function displayMessage(title, text, action) {
+        function displayMessage(title, text) {
             gameRunning = false;
-            const existingMessage = document.getElementById('game-message');
-            if (existingMessage) existingMessage.remove();
-
-            const messageBox = document.createElement('div');
-            messageBox.id = 'game-message';
-            messageBox.className = 'message-box';
-            
-            messageBox.innerHTML = `
+            // Show the game over message box 
+            initialMessageBox.classList.remove('hidden');
+            initialMessageBox.innerHTML = `
                 <h2 class="text-3xl font-extrabold mb-3 text-yellow-400 text-center">${title}</h2>
-                <p class="text-sm mb-4 text-center px-2">${text}</p>
-                <button class="start-button">
-                    TAP TO START
-                </button>
+                <p class="text-base mb-4 text-center px-2">${text}</p>
             `;
-            container.appendChild(messageBox);
-            
-            const startHandler = (e) => {
-                e.stopPropagation(); 
-                messageBox.removeEventListener('click', startHandler);
-                messageBox.removeEventListener('touchstart', startHandler);
-                action();
-            };
-
-            messageBox.addEventListener('click', startHandler);
-            messageBox.addEventListener('touchstart', startHandler);
         }
-
 
         // --- Responsiveness and Input Handling ---
 
@@ -267,23 +296,17 @@
             canvas.width = GAME_WIDTH;
             canvas.height = GAME_HEIGHT;
 
-            // Step 1: Calculate the total vertical space taken up by non-canvas elements
+            // Calculate scaling to fit perfectly within the container
             const overheadTop = canvas.offsetTop; 
-            
-            // Step 2: Calculate the height of elements below the canvas (score + its margin)
             const overheadBottom = scoreDisplay.getBoundingClientRect().height + 20; 
-            
-            // Step 3: Calculate the available height for the canvas
             const availableHeight = container.clientHeight - overheadTop - overheadBottom;
-            const availableWidth = container.clientWidth - 32; // Container width minus horizontal padding (p-4 * 2 = 32px)
+            const availableWidth = container.clientWidth - 32; 
 
-            // Step 4: Determine the scale factor based on the smaller dimension (the constraint)
             const scaleX = availableWidth / GAME_WIDTH;
             const scaleY = availableHeight / GAME_HEIGHT;
             
             scaleFactor = Math.min(scaleX, scaleY);
             
-            // Step 5: Apply the calculated external dimensions to the canvas style
             const finalWidth = GAME_WIDTH * scaleFactor;
             const finalHeight = GAME_HEIGHT * scaleFactor;
             
@@ -296,9 +319,24 @@
 
         // Mouse/Touch Input Handler
         function handlePaddleMove(e) {
-            if (!gameRunning || gameOver) return;
             e.preventDefault(); 
-            
+
+            // 1. Initial Start
+            if (!isGameStarted) {
+                startGame();
+                return; 
+            }
+
+            // 2. Restart After Game Over
+            if (gameOver) { 
+                startGame();
+                return;
+            }
+
+            // 3. Ignore if Paused (due to scoring)
+            if (!gameRunning) return; 
+
+            // Input reading logic
             let clientY = 0;
             if (e.touches && e.touches.length > 0) {
                 clientY = e.touches[0].clientY;
@@ -321,10 +359,11 @@
         window.addEventListener('load', () => {
             setTimeout(() => {
                 handleResize();
-                displayMessage('Welcome to Pong!', 'Drag the green paddle (right) up and down to play. First to 5 points wins! Tap anywhere to begin!', startGame);
+                drawEverything(); 
             }, 100);
         });
 
+        // Use the canvas or the whole container for input
         canvas.addEventListener('mousemove', handlePaddleMove);
         canvas.addEventListener('touchmove', handlePaddleMove);
         canvas.addEventListener('touchstart', (e) => {
