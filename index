@@ -1,0 +1,84 @@
+pong_launcher.html
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Game Launcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            touch-action: none;
+        }
+        .game-screen {
+            width: 100%;
+            max-width: 400px;
+            height: 600px;
+            @apply bg-gray-900 border-8 border-gray-700 shadow-2xl rounded-lg flex flex-col justify-center items-center;
+            border-image: linear-gradient(45deg, #10b981, #3b82f6) 1;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        .pong-paddle {
+            width: 60px;
+            height: 10px;
+            @apply bg-white rounded-sm;
+        }
+        .pong-ball {
+            width: 12px;
+            height: 12px;
+            @apply bg-red-500 rounded-full animate-pulse;
+        }
+        .start-button {
+             @apply mt-8 px-6 py-3 bg-green-500 text-black font-bold text-lg rounded-full shadow-lg hover:bg-green-400 transition transform hover:scale-105;
+             transition: all 0.2s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-screen p-4">
+        <h1 class="text-4xl font-extrabold text-white mb-2">PONG</h1>
+        <div class="text-green-400 text-xl font-mono mb-8">ARCADE CLASSIC</div>
+
+        <!-- Static Game Visual -->
+        <div class="w-full h-40 flex flex-col justify-between items-center px-6 my-4">
+            <div class="pong-paddle"></div>
+            <div class="border-t border-dashed border-gray-600 w-full"></div>
+            <div class="pong-paddle"></div>
+        </div>
+        
+        <!-- Action Area -->
+        <div class="text-center mt-12">
+            <p class="text-gray-400 mb-4">Launch Pong via AppSheet to confirm link (placeholder).</p>
+            <p class="text-2xl font-bold text-yellow-400">STATUS: READY</p>
+            <button class="start-button" onclick="alertPong()">
+                LAUNCH GAME
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Simple function to confirm button works (no actual game code)
+        function alertPong() {
+             const modal = document.createElement('div');
+             modal.className = 'fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50';
+             modal.innerHTML = `
+                <div class="bg-white p-6 rounded-lg shadow-xl text-center">
+                    <p class="text-xl font-bold mb-4">Pong is Ready!</p>
+                    <p class="text-gray-700">This placeholder confirms the AppSheet link is working correctly.</p>
+                    <button class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="this.parentNode.parentNode.remove()">Close</button>
+                </div>
+             `;
+             document.body.appendChild(modal);
+        }
+    </script>
+</body>
+</html>
