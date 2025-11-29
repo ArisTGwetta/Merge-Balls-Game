@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghost Run Game</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* General styling for the body */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1rem;
+            box-sizing: border-box;
+            user-select: none; /* Prevent selection on interaction */
+            touch-action: none; /* Prevents viewport panning/zooming on touch */
+        }
+
+        /* Container for the game and controls */
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+            background-color: #2d3748; /* Slightly lighter dark background for card */
+            border-radius: 16px;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.5);
+            padding: 1rem;
+        }
+
+        /* Game container holds the canvas and the overlaid message */
+        #game-container {
+            position: relative;
+            /* Use a fixed aspect ratio or max-height to ensure square/responsive shape */
+            width: 90vw; /* Take up 90% of viewport width */
+            max-width: 500px; /* Max size for desktop view */
+            aspect-ratio: 1 / 1; /* Keep it square */
+            margin-bottom: 1rem;
+            border: 4px solid #f6e05e; /* Pac-Man yellow border */
+            border-radius: 8px;
+            overflow: hidden;
+            flex-grow: 0; /* Important for flex layout to prevent stretching */
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #000; /* Game background */
+        }
+
+        /* Message Box Overlay (New Positioning) */
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            text-align: center;
+            padding: 1.5rem 2.5rem;
+            background-color: rgba(0, 0, 0, 0.9);
+            border: 3px solid #63b3ed; /* Blue border for visibility */
+            border-radius: 12px;
+            color: #fff;
+            font-size: 1.5rem;
+            font-weight: bold;
+            line-height: 1.4;
+            display: none; /* Initially hidden */
+            max-width: 80%;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+        }
+
+        /* Large Emoji Styling (New Size) */
+        .huge-emoji {
+            font-size: 3rem; /* Significantly larger font size */
+            line-height: 1;
+            display: block; /* Ensure the emoji is on its own line */
+            margin-bottom: 0.5rem;
+        }
+
+        .text-pacman-yellow {
+            color: #f6e05e;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <h1 class="text-3xl font-extrabold mb-4 text-pacman-yellow">Pac-Man Ghost Run</h1>
+
+        <div id="game-container">
+            <canvas id="gameCanvas"></canvas>
+            
+            <!-- Message Box now inside the game container, centered over the canvas -->
+            <div id="message" class="transition-opacity duration-300">
+                <!-- Content set by JavaScript -->
+            </div>
+        </div>
+
+        <div id="score-board" class="text-xl text-white mt-4 flex justify-around w-full">
+            <p>Score: <span id="score">0</span></p>
+            <p>Status: <span id="status">Ready</span></p>
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase/Auth/Setup (Necessary for all persistent apps) ---
+        // NOTE: These variables are provided by the canvas environment.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Firebase dependencies for Realtime data/auth are assumed to be imported
+        // but are not strictly needed for this simple single-player visual update.
+        // The script below focuses purely on the requested visual and message logic changes.
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const messageEl = document.getElementById('message');
+        const scoreEl = document.getElementById('score');
+        const statusEl = document.getElementById('status');
+
+        let gameWidth = 0;
+        let gameHeight = 0;
+        let pacmanX = 0;
+        let pacmanY = 0;
+        let ghostX = 0;
+        let ghostY = 0;
+        let pacmanRadius = 15;
+
+        // --- Core Game Functions ---
+
+        /**
+         * Resizes the canvas to match its container's current dimensions.
+         * Crucial for responsiveness.
+         */
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            gameWidth = container.clientWidth;
+            gameHeight = container.clientHeight;
+            canvas.width = gameWidth;
+            canvas.height = gameHeight;
+
+            // Initialize positions based on new size (e.g., center)
+            pacmanX = gameWidth / 4;
+            pacmanY = gameHeight / 2;
+            ghostX = gameWidth * 3 / 4;
+            ghostY = gameHeight / 2;
+            
+            pacmanRadius = Math.min(gameWidth, gameHeight) / 20;
+
+            draw(); // Redraw after resize
+        }
+
+        /**
+         * Draws the Pac-Man character.
+         */
+        function drawPacman() {
+            ctx.fillStyle = '#f6e05e'; // Yellow
+            ctx.beginPath();
+            // Simple open mouth for demonstration
+            ctx.arc(pacmanX, pacmanY, pacmanRadius, 0.2 * Math.PI, 1.8 * Math.PI);
+            ctx.lineTo(pacmanX, pacmanY);
+            ctx.fill();
+        }
+
+        /**
+         * Draws the Ghost placeholder (the big emoji is handled by HTML overlay).
+         */
+        function drawGhost() {
+            ctx.fillStyle = '#63b3ed'; // Blue
+            // Draw a simple ghost shape
+            ctx.beginPath();
+            // Base rectangle
+            ctx.rect(ghostX - pacmanRadius, ghostY - pacmanRadius, pacmanRadius * 2, pacmanRadius * 2);
+            ctx.fill();
+        }
+
+        /**
+         * Main drawing loop.
+         */
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, gameWidth, gameHeight);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, gameWidth, gameHeight);
+
+            drawPacman();
+            drawGhost();
+        }
+
+        /**
+         * Displays a message on the screen with optional emoji.
+         * @param {string} text The text to display.
+         * @param {string|null} emoji The emoji to display (e.g., '👻').
+         */
+        function showGameMessage(text, emoji = null) {
+            let content = '';
+            
+            if (emoji) {
+                // Add the large emoji on top
+                content += `<span class="huge-emoji">${emoji}</span>`;
+            }
+
+            // Implementation of the two-line message request
+            if (text.includes("I'M FREE!")) {
+                // Break the message into two lines and bold the text
+                content += '<span>I\'M FREE!<br><span class="text-xl font-normal">ONE OF US!</span></span>';
+            } else {
+                content += `<span>${text}</span>`;
+            }
+
+            messageEl.innerHTML = content;
+            messageEl.style.display = 'block';
+            statusEl.textContent = text.replace(/<br.*?>/g, ' '); // Update status bar
+        }
+
+        /**
+         * Hides the message.
+         */
+        function hideGameMessage() {
+            messageEl.style.display = 'none';
+        }
+
+        // --- Demo Logic (Simulate a Win/Message) ---
+
+        let state = 'start';
+        let demoTimer;
+
+        function runDemo() {
+            if (state === 'start') {
+                showGameMessage('CLICK TO START', '👆');
+                state = 'waiting';
+            }
+        }
+
+        canvas.addEventListener('click', () => {
+            if (state === 'waiting' || state === 'start') {
+                hideGameMessage();
+                state = 'playing';
+                statusEl.textContent = 'Running...';
+                
+                // Simulate the event that triggers the requested message
+                clearTimeout(demoTimer);
+                demoTimer = setTimeout(() => {
+                    // This is where the updated, two-line message is called:
+                    showGameMessage("I'M FREE!", '👻');
+                    scoreEl.textContent = '100';
+                    state = 'free';
+                }, 2000);
+            } else if (state === 'free') {
+                runDemo(); // Reset
+            }
+        });
+
+        // --- Initialization ---
+
+        window.addEventListener('resize', resizeCanvas);
+        
+        window.onload = function() {
+            // Initial setup
+            resizeCanvas(); 
+            runDemo(); // Start the demo sequence
+        };
+        
+        // Simple touch event handler for mobile interaction
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent scrolling/zooming
+            canvas.click();
+        }, { passive: false });
+
+
+    </script>
+</body>
+</html>
