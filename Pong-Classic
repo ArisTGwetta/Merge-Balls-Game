@@ -1,0 +1,417 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mobile Pong Classic</title>
+    <style>
+        /* Mobile-Ready Constraints from Lessons Learned */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #2c3e50;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            overflow: hidden; 
+            touch-action: none; /* Prevents mobile scroll/zoom */
+            padding-top: 10px; 
+            padding-bottom: 10px; 
+            box-sizing: border-box; 
+        }
+
+        #game-container {
+            position: relative;
+            background-color: #ecf0f1;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            padding: 10px; 
+            box-sizing: border-box; 
+            
+            width: clamp(280px, 95vw, 400px); /* Max 400px width */
+            height: 90vh; /* Safety margin for mobile toolbars */
+            max-height: 700px; 
+            min-height: 500px; 
+            
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+        }
+
+        #score-display {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #34495e;
+        }
+
+        #game-canvas {
+            border: 4px solid #34495e;
+            background-color: #000;
+            display: block;
+            border-radius: 8px;
+            cursor: none;
+            
+            width: 100%; 
+            /* Crucial fixes from Lessons Learned I.2 and I.3 */
+            flex-grow: 0; 
+            margin: auto 0; 
+            min-height: 300px; 
+        }
+
+        #message-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 8px;
+            z-index: 10;
+            cursor: pointer;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        #message-overlay.active {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .cta-button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 6px;
+            font-size: 18px;
+            margin-top: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        
+        <div id="score-display">
+            <span id="player-score">0</span>
+            <span id="ai-score">0</span>
+        </div>
+
+        <canvas id="game-canvas"></canvas>
+
+        <div id="message-overlay">
+            <p id="overlay-text"></p>
+            <div id="restart-button" class="cta-button">TAP TO START</div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const INTERNAL_WIDTH = 400;
+        const INTERNAL_HEIGHT = 600; 
+        const WINNING_SCORE = 5;
+
+        // Paddle Configuration
+        const PADDLE_WIDTH = 60;
+        const PADDLE_HEIGHT = 8;
+        const PADDLE_SPEED = 6; 
+        const PADDLE_Y_OFFSET = 30; // Distance from top/bottom edge
+
+        // Ball Configuration
+        const BALL_RADIUS = 5;
+        const BALL_SPEED_START = 4;
+        const BALL_MAX_SPEED = 10;
+        const AI_EASE = 0.05; // AI reaction speed
+
+        // --- SETUP ---
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const playerScoreEl = document.getElementById('player-score');
+        const aiScoreEl = document.getElementById('ai-score');
+        const overlay = document.getElementById('message-overlay');
+        const overlayText = document.getElementById('overlay-text');
+        const restartButton = document.getElementById('restart-button');
+        
+        // High DPI Scaling
+        const dpr = window.devicePixelRatio || 1;
+
+        // --- STATE ---
+        let playerPaddle = { x: INTERNAL_WIDTH / 2 - PADDLE_WIDTH / 2, y: INTERNAL_HEIGHT - PADDLE_Y_OFFSET, vx: 0 };
+        let aiPaddle = { x: INTERNAL_WIDTH / 2 - PADDLE_WIDTH / 2, y: PADDLE_Y_OFFSET - PADDLE_HEIGHT, vx: 0 };
+        let ball = { x: INTERNAL_WIDTH / 2, y: INTERNAL_HEIGHT / 2, vx: 0, vy: 0, speed: BALL_SPEED_START };
+        let playerScore = 0;
+        let aiScore = 0;
+        let isPaused = true;
+        let isGameOver = false;
+
+        // --- GAME LOGIC ---
+
+        function resetBall(servingPlayer) {
+            ball.x = INTERNAL_WIDTH / 2;
+            ball.y = INTERNAL_HEIGHT / 2;
+            ball.speed = BALL_SPEED_START;
+            
+            // Random angle between 45 and 135 degrees (top half) or 225 and 315 (bottom half)
+            let angle;
+            if (servingPlayer === 'player') {
+                angle = Math.random() * (135 - 45) + 45; // Shoot up (AI side)
+            } else { // AI serves
+                angle = Math.random() * (315 - 225) + 225; // Shoot down (Player side)
+            }
+            
+            ball.vx = ball.speed * Math.cos(angle * Math.PI / 180);
+            ball.vy = ball.speed * Math.sin(angle * Math.PI / 180);
+            isPaused = true;
+            showOverlay("Tap to Serve!", 'START');
+        }
+
+        function startGame() {
+            playerScore = 0;
+            aiScore = 0;
+            isGameOver = false;
+            updateScoreDisplay();
+            resetBall('player');
+        }
+
+        function update() {
+            if (isPaused || isGameOver) return;
+
+            // 1. Move Ball
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+
+            // 2. Ball Wall Collision
+            if (ball.x - BALL_RADIUS < 0 || ball.x + BALL_RADIUS > INTERNAL_WIDTH) {
+                ball.vx *= -1;
+            }
+
+            // 3. Score
+            if (ball.y < 0) {
+                // Player scores
+                playerScore++;
+                updateScoreDisplay();
+                if (playerScore >= WINNING_SCORE) {
+                    endGame("YOU WIN! Tap to play again.");
+                    return;
+                }
+                resetBall('player');
+            } else if (ball.y > INTERNAL_HEIGHT) {
+                // AI scores
+                aiScore++;
+                updateScoreDisplay();
+                if (aiScore >= WINNING_SCORE) {
+                    endGame("GAME OVER! Tap to try again.");
+                    return;
+                }
+                resetBall('ai');
+            }
+
+            // 4. Player Paddle Collision (Bottom)
+            if (ball.y + BALL_RADIUS > playerPaddle.y &&
+                ball.y - BALL_RADIUS < playerPaddle.y + PADDLE_HEIGHT &&
+                ball.x > playerPaddle.x &&
+                ball.x < playerPaddle.x + PADDLE_WIDTH &&
+                ball.vy > 0) 
+            {
+                ball.vy *= -1.1; // Increase speed slightly and reverse Y
+                ball.speed = Math.min(ball.speed * 1.1, BALL_MAX_SPEED);
+                
+                // Calculate impact angle based on paddle hit location
+                let hitRatio = (ball.x - (playerPaddle.x + PADDLE_WIDTH / 2)) / (PADDLE_WIDTH / 2);
+                ball.vx = ball.speed * hitRatio;
+                ball.vy = -Math.sqrt(ball.speed * ball.speed - ball.vx * ball.vx);
+            }
+            
+            // 5. AI Paddle Collision (Top)
+            if (ball.y - BALL_RADIUS < aiPaddle.y + PADDLE_HEIGHT &&
+                ball.y + BALL_RADIUS > aiPaddle.y &&
+                ball.x > aiPaddle.x &&
+                ball.x < aiPaddle.x + PADDLE_WIDTH &&
+                ball.vy < 0) 
+            {
+                ball.vy *= -1.1; // Increase speed slightly and reverse Y
+                ball.speed = Math.min(ball.speed * 1.1, BALL_MAX_SPEED);
+
+                let hitRatio = (ball.x - (aiPaddle.x + PADDLE_WIDTH / 2)) / (PADDLE_WIDTH / 2);
+                ball.vx = ball.speed * hitRatio;
+                ball.vy = Math.sqrt(ball.speed * ball.speed - ball.vx * ball.vx);
+            }
+
+            // 6. AI Movement (Simple tracking)
+            const targetX = ball.x - PADDLE_WIDTH / 2;
+            aiPaddle.x += (targetX - aiPaddle.x) * AI_EASE;
+            
+            // AI Boundary check
+            aiPaddle.x = Math.max(0, Math.min(INTERNAL_WIDTH - PADDLE_WIDTH, aiPaddle.x));
+            
+            // 7. Player Paddle Boundary check
+            playerPaddle.x += playerPaddle.vx;
+            playerPaddle.x = Math.max(0, Math.min(INTERNAL_WIDTH - PADDLE_WIDTH, playerPaddle.x));
+            
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+
+            // Draw center line
+            ctx.beginPath();
+            ctx.setLineDash([10, 10]);
+            ctx.moveTo(0, INTERNAL_HEIGHT / 2);
+            ctx.lineTo(INTERNAL_WIDTH, INTERNAL_HEIGHT / 2);
+            ctx.strokeStyle = '#34495e';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw paddles
+            ctx.fillStyle = '#ecf0f1';
+            ctx.fillRect(playerPaddle.x, playerPaddle.y, PADDLE_WIDTH, PADDLE_HEIGHT);
+            ctx.fillRect(aiPaddle.x, aiPaddle.y, PADDLE_WIDTH, PADDLE_HEIGHT);
+
+            // Draw ball
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, BALL_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = '#e74c3c';
+            ctx.fill();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function updateScoreDisplay() {
+            playerScoreEl.textContent = playerScore;
+            aiScoreEl.textContent = aiScore;
+        }
+
+        function showOverlay(text, buttonText = 'RESTART') {
+            overlayText.textContent = text;
+            restartButton.textContent = buttonText;
+            overlay.classList.add('active');
+        }
+
+        function hideOverlay() {
+            overlay.classList.remove('active');
+            isPaused = false;
+        }
+
+        function endGame(text) {
+            isPaused = true;
+            isGameOver = true;
+            showOverlay(text, 'RESTART');
+        }
+
+
+        // --- INPUT HANDLING ---
+
+        function handleInput(clientX) {
+            if (isGameOver) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const scaleFactor = INTERNAL_WIDTH / rect.width;
+
+            // Calculate touch position relative to the game's internal width
+            let x = (clientX - rect.left) * scaleFactor;
+            
+            // Center the paddle on the touch point
+            let paddleTargetX = x - PADDLE_WIDTH / 2;
+
+            // Set the player paddle position (no physics for simple Pong)
+            playerPaddle.x = Math.max(0, Math.min(INTERNAL_WIDTH - PADDLE_WIDTH, paddleTargetX));
+        }
+        
+        // Input Events (Mouse and Touch)
+        canvas.addEventListener('mousemove', (e) => {
+            if (isPaused) return;
+            handleInput(e.clientX);
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); 
+            if (isPaused) return;
+            handleInput(e.touches[0].clientX);
+        }, {passive: false});
+
+        // Click/Tap to Start/Serve
+        overlay.addEventListener('click', () => {
+            if (isGameOver) {
+                startGame();
+            } else if (isPaused) {
+                hideOverlay();
+            }
+        });
+
+        // --- RESIZE HANDLER (Crucial for vertical responsiveness) ---
+        function handleResize() {
+            const container = document.getElementById('game-container');
+            const header = document.getElementById('score-display');
+            
+            const containerRect = container.getBoundingClientRect();
+            const headerHeight = header.getBoundingClientRect().height;
+
+            const containerPadding = 2 * 10; // Padding on top and bottom of container
+            const availableCanvasHeight = containerRect.height - headerHeight - containerPadding; 
+            const desiredCanvasWidth = containerRect.width - containerPadding; 
+
+            const gameAspectRatio = INTERNAL_WIDTH / INTERNAL_HEIGHT; // 400/600 = 0.666
+
+            let finalCanvasWidth = desiredCanvasWidth;
+            let finalCanvasHeight = availableCanvasHeight;
+
+            const calculatedHeightBasedOnWidth = desiredCanvasWidth / gameAspectRatio;
+            const calculatedWidthBasedOnHeight = availableCanvasHeight * gameAspectRatio;
+
+            if (calculatedHeightBasedOnWidth > availableCanvasHeight) {
+                // Height is the constraint
+                finalCanvasHeight = availableCanvasHeight;
+                finalCanvasWidth = calculatedWidthBasedOnHeight;
+            } else {
+                // Width is the constraint
+                finalCanvasHeight = calculatedHeightBasedOnWidth;
+                finalCanvasWidth = desiredCanvasWidth;
+            }
+            
+            // Set CSS size (for visual rendering and input rect)
+            canvas.style.width = \`\${finalCanvasWidth}px\`;
+            canvas.style.height = \`\${finalCanvasHeight}px\`;
+
+            // Set internal drawing size (for game logic)
+            canvas.width = INTERNAL_WIDTH * dpr;
+            canvas.height = INTERNAL_HEIGHT * dpr;
+            
+            // Scale context for high DPI
+            ctx.scale(dpr, dpr); 
+        }
+
+        // --- STARTUP SEQUENCE ---
+        window.onload = function () {
+            handleResize();
+            window.addEventListener('resize', handleResize);
+            startGame();
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
+
