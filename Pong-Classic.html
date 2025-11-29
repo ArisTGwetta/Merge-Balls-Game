@@ -15,38 +15,47 @@
             align-items: center;
             min-height: 100vh;
             overflow: hidden;
-            touch-action: none; /* Disable panning/zooming */
+            touch-action: none; /* Lesson Learned II.3: Disable panning/zooming */
         }
         #game-container {
-            /* Applying Lesson Learned I.1: use less than 100vh */
-            @apply flex flex-col justify-center items-center p-4 rounded-xl shadow-2xl;
+            /* Lesson Learned I.1: Use reduced vh for a safe margin on mobile */
+            @apply flex flex-col justify-start items-center p-4 rounded-xl shadow-2xl;
             background-color: #1a202c;
             border: 8px solid #3b82f6;
-            max-width: 90vw;
+            max-width: 95vw; /* Allow a little more width */
             width: 400px;
-            /* Height will be managed by JS to maintain 4:3 aspect ratio */
+            /* CRITICAL FIX: Aggressively reduce max height */
+            max-height: 80vh; 
+            box-sizing: border-box;
+            position: relative; /* Set context for absolute message box */
         }
         canvas {
             background-color: #000;
             display: block;
-            /* Applying Lesson Learned I.2: Prevent stretching */
-            flex-grow: 0;
+            /* Lesson Learned I.2: Prevent stretching */
+            flex-grow: 0; 
             margin: auto;
             border-radius: 4px;
         }
         .message-box {
-            @apply absolute inset-0 bg-gray-900 bg-opacity-90 flex flex-col justify-center items-center text-white p-4 rounded-md;
+            /* Ensures message box fills the container exactly */
+            @apply absolute inset-0 bg-gray-900 bg-opacity-95 flex flex-col justify-center items-center text-white p-4 rounded-md;
             z-index: 100;
+            height: 100%; 
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 4px; /* Match canvas and container corners */
         }
         .start-button {
-            @apply mt-6 px-8 py-3 bg-green-500 text-black font-bold text-lg rounded-full shadow-lg hover:bg-green-400 transition transform hover:scale-105;
+            /* Compact button style */
+            @apply mt-4 px-6 py-2 bg-green-500 text-black font-bold text-base rounded-full shadow-lg hover:bg-green-400 transition transform hover:scale-105;
         }
     </style>
 </head>
 <body>
 
     <div id="game-container">
-        <h1 class="text-3xl font-extrabold text-white mb-4">PONG CLASSIC</h1>
+        <h1 id="game-title" class="text-3xl font-extrabold text-white mb-4">PONG CLASSIC</h1>
         <canvas id="pongCanvas"></canvas>
         <div id="score-display" class="mt-4 text-xl font-mono text-white">PLAYER: 0 | CPU: 0</div>
 
@@ -62,6 +71,8 @@
         const ctx = canvas.getContext('2d');
         const scoreDisplay = document.getElementById('score-display');
         const container = document.getElementById('game-container');
+        const titleElement = document.getElementById('game-title');
+        const touchArea = document.getElementById('touch-area');
 
         // Game Dimensions (Internal Drawing Resolution - 4:3 Aspect Ratio)
         const GAME_WIDTH = 400;
@@ -241,15 +252,18 @@
 
             const messageBox = document.createElement('div');
             messageBox.id = 'game-message';
+            // Use flex-col and p-4 on message-box (defined in CSS)
             messageBox.className = 'message-box';
             
+            // Use compact formatting
             messageBox.innerHTML = `
-                <h2 class="text-4xl font-extrabold mb-4 text-yellow-400">${title}</h2>
-                <p class="text-lg mb-6">${text}</p>
+                <h2 class="text-3xl font-extrabold mb-3 text-yellow-400 text-center">${title}</h2>
+                <p class="text-sm mb-4 text-center px-2">${text}</p>
                 <button class="start-button">
-                    RESTART GAME
+                    START GAME
                 </button>
             `;
+            // Append message box to the container (not the body)
             container.appendChild(messageBox);
             
             messageBox.querySelector('.start-button').addEventListener('click', () => {
@@ -259,36 +273,51 @@
         }
 
 
-        // --- Responsiveness and Input Handling ---
+        // --- Responsiveness and Input Handling (CRITICAL FIXES HERE) ---
 
         function handleResize() {
             // Set internal drawing size
             canvas.width = GAME_WIDTH;
             canvas.height = GAME_HEIGHT;
 
-            // Set external style size based on container to maintain aspect ratio
-            const containerWidth = container.clientWidth - 32; // - padding
+            // Get current dimensions of non-canvas elements to calculate available space
+            const containerRect = container.getBoundingClientRect();
             
-            // Calculate scale based on width, but respect height limits
-            scaleFactor = containerWidth / GAME_WIDTH;
-            let targetHeight = GAME_HEIGHT * scaleFactor;
+            // Calculate height of fixed elements (Title, Score, Touch Bar, and vertical margins/padding)
+            const titleHeight = titleElement.offsetHeight;
+            const scoreHeight = scoreDisplay.offsetHeight;
+            const touchHeight = touchArea.offsetHeight;
+            
+            // Estimate total vertical fixed overhead (Title + Score + Touch + margins/padding between them)
+            // Use 40px padding (8px border + 16px container padding) + estimated component margins (20px)
+            const totalFixedVerticalOverhead = titleHeight + scoreHeight + touchHeight + 50; 
+            
+            const availableHeight = containerRect.height - totalFixedVerticalOverhead;
+            const availableWidth = containerRect.width - 32; // Container width minus horizontal padding
 
-            // Limit height if the screen is too short
-            const maxContainerHeight = window.innerHeight * 0.9 - 100; // Account for header/footer
-            if (targetHeight > maxContainerHeight) {
-                scaleFactor = maxContainerHeight / GAME_HEIGHT;
-                canvas.style.height = `${maxContainerHeight}px`;
-                canvas.style.width = `${GAME_WIDTH * scaleFactor}px`;
-            } else {
-                 canvas.style.width = `${containerWidth}px`;
-                 canvas.style.height = `${targetHeight}px`;
-            }
+            // Determine the scale factor based on the smaller dimension (the constraint)
+            const scaleX = availableWidth / GAME_WIDTH;
+            const scaleY = availableHeight / GAME_HEIGHT;
+            
+            // Lesson Learned I.3: Use Math.min to ensure the canvas fits perfectly within the smallest constraint
+            scaleFactor = Math.min(scaleX, scaleY);
+            
+            // Apply the calculated external dimensions to the canvas style
+            const finalWidth = GAME_WIDTH * scaleFactor;
+            const finalHeight = GAME_HEIGHT * scaleFactor;
+            
+            canvas.style.width = `${finalWidth}px`;
+            canvas.style.height = `${finalHeight}px`;
+
+            // CRITICAL: Redraw everything to ensure initial state is visible after resize
+            drawEverything();
+            drawScores();
         }
 
         // Mouse/Touch Input Handler
         function handlePaddleMove(e) {
             if (!gameRunning || gameOver) return;
-            e.preventDefault(); 
+            e.preventDefault(); // Lesson Learned II.3: Prevent scrolling/panning on touch
             
             // Determine client Y from mouse or touch
             let clientY = 0;
@@ -316,8 +345,13 @@
         // Attach listeners
         window.addEventListener('resize', handleResize);
         window.addEventListener('load', () => {
-            handleResize();
-            displayMessage('Welcome to Pong!', 'Drag the right paddle (green) up and down to hit the ball.', startGame);
+            // IMPORTANT: Call handleResize after all elements are rendered
+            // Using a small timeout to ensure the DOM has finished calculating element heights
+            setTimeout(() => {
+                handleResize();
+                // Start the game with the message box
+                displayMessage('Welcome to Pong!', 'Drag the green paddle (right) up and down to start the match. The first to 5 points wins.', startGame);
+            }, 100);
         });
 
         canvas.addEventListener('mousemove', handlePaddleMove);
