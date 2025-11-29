@@ -6,63 +6,68 @@
     <title>Classic Pong Game</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Lesson Learned II.3: Disable panning/zooming for clean touch interactions */
         body {
             font-family: 'Inter', sans-serif;
             background-color: #0d1117;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            align-items: center;
+            justify-content: center; /* Vertically center the container */
+            align-items: center;     /* Horizontally center the container */
             min-height: 100vh;
             overflow: hidden;
-            touch-action: none; /* Lesson Learned II.3: Disable panning/zooming */
+            touch-action: none; 
         }
         #game-container {
-            /* Lesson Learned I.1: Use reduced vh for a safe margin on mobile */
+            /* Aggressive Vertical Fix: Reduced max-height for console stability */
             @apply flex flex-col justify-start items-center p-4 rounded-xl shadow-2xl;
             background-color: #1a202c;
             border: 8px solid #3b82f6;
-            max-width: 95vw; /* Allow a little more width */
-            width: 400px;
-            /* CRITICAL FIX: Aggressively reduce max height */
-            max-height: 80vh; 
+            max-width: 95vw;
+            width: 95%; /* Use fluid width */
+            max-height: 65vh; /* Further reduction for console stability */
+            height: 100%; 
             box-sizing: border-box;
-            position: relative; /* Set context for absolute message box */
+            position: relative; 
         }
-        canvas {
+        #pongCanvas {
             background-color: #000;
             display: block;
-            /* Lesson Learned I.2: Prevent stretching */
             flex-grow: 0; 
-            margin: auto;
+            margin: 0 auto; /* CRITICAL: Ensure the canvas is horizontally centered as a flex item */
             border-radius: 4px;
         }
         .message-box {
             /* Ensures message box fills the container exactly */
-            @apply absolute inset-0 bg-gray-900 bg-opacity-95 flex flex-col justify-center items-center text-white p-4 rounded-md;
+            @apply absolute inset-0 bg-gray-900 bg-opacity-95 flex flex-col justify-center items-center text-white p-4 rounded-md cursor-pointer;
             z-index: 100;
             height: 100%; 
             width: 100%;
             box-sizing: border-box;
-            border-radius: 4px; /* Match canvas and container corners */
+            border-radius: 4px;
         }
         .start-button {
-            /* Compact button style */
+            /* Compact button style - this button is now just a visual element */
             @apply mt-4 px-6 py-2 bg-green-500 text-black font-bold text-base rounded-full shadow-lg hover:bg-green-400 transition transform hover:scale-105;
+            pointer-events: none; /* Disable its own click so the parent message-box handles it */
+        }
+        #game-title {
+            /* Fix Title Wrapping: Reduced font size */
+            @apply text-2xl font-extrabold text-white mb-4;
         }
     </style>
 </head>
 <body>
 
     <div id="game-container">
-        <h1 id="game-title" class="text-3xl font-extrabold text-white mb-4">PONG CLASSIC</h1>
+        <!-- Title with reduced font size -->
+        <h1 id="game-title">PONG CLASSIC</h1>
+        
+        <!-- The Canvas -->
         <canvas id="pongCanvas"></canvas>
+        
+        <!-- Score Display -->
         <div id="score-display" class="mt-4 text-xl font-mono text-white">PLAYER: 0 | CPU: 0</div>
-
-        <!-- Touch Controls for Mobile -->
-        <div id="touch-area" class="w-full h-8 flex justify-center items-center mt-4 bg-gray-800 rounded-lg text-gray-400 text-sm">
-            Drag finger left/right on the canvas to control the paddle.
-        </div>
     </div>
 
     <script>
@@ -71,9 +76,7 @@
         const ctx = canvas.getContext('2d');
         const scoreDisplay = document.getElementById('score-display');
         const container = document.getElementById('game-container');
-        const titleElement = document.getElementById('game-title');
-        const touchArea = document.getElementById('touch-area');
-
+        
         // Game Dimensions (Internal Drawing Resolution - 4:3 Aspect Ratio)
         const GAME_WIDTH = 400;
         const GAME_HEIGHT = 600;
@@ -96,11 +99,11 @@
         // Game State
         let playerScore = 0;
         let cpuScore = 0;
-        const WINNING_SCORE = 5;
+        const WINNING_SCORE = 5; // <-- Confirmed: First to 5 wins!
         let gameRunning = false;
         let gameOver = false;
 
-        // --- Core Functions ---
+        // --- Core Game Logic (Drawing, Movement, Collision) ---
 
         function drawRect(x, y, w, h, color) {
             ctx.fillStyle = color;
@@ -132,15 +135,9 @@
         function drawEverything() {
             // Background
             drawRect(0, 0, GAME_WIDTH, GAME_HEIGHT, '#000');
-
-            // Net
             drawNet();
-
-            // Paddles (Player is on the right for easier mobile drag)
-            drawRect(GAME_WIDTH - PADDLE_WIDTH - 20, playerY, PADDLE_WIDTH, PADDLE_HEIGHT, '#10b981'); // Player (Right)
-            drawRect(20, cpuY, PADDLE_WIDTH, PADDLE_HEIGHT, '#3b82f6'); // CPU (Left)
-
-            // Ball
+            drawRect(GAME_WIDTH - PADDLE_WIDTH - 20, playerY, PADDLE_WIDTH, PADDLE_HEIGHT, '#10b981'); 
+            drawRect(20, cpuY, PADDLE_WIDTH, PADDLE_HEIGHT, '#3b82f6'); 
             drawCircle(ballX, ballY, BALL_SIZE / 2, '#ef4444');
         }
 
@@ -148,7 +145,6 @@
             ballX += ballSpeedX;
             ballY += ballSpeedY;
 
-            // Bounce off top/bottom walls
             if (ballY < BALL_SIZE / 2 || ballY > GAME_HEIGHT - BALL_SIZE / 2) {
                 ballSpeedY = -ballSpeedY;
             }
@@ -157,81 +153,70 @@
         function resetBall(servingPlayer) {
             ballX = GAME_WIDTH / 2;
             ballY = GAME_HEIGHT / 2;
-            ballSpeedX = servingPlayer === 'player' ? -5 : 5; // Start ball towards loser/winner
+            // The ball direction is decided by who scored the last point
+            ballSpeedX = servingPlayer === 'player' ? -5 : 5;
             ballSpeedY = Math.random() > 0.5 ? 5 : -5;
         }
         
         function computerMovement() {
-            // Simple AI: Follow the ball slowly, but don't be perfect
             const cpuCenter = cpuY + PADDLE_HEIGHT / 2;
+            // Simple AI that tracks the ball but lags a bit (0.7 speed)
             if (cpuCenter < ballY - 20) {
                 cpuY += PADDLE_SPEED * 0.7;
             } else if (cpuCenter > ballY + 20) {
                 cpuY -= PADDLE_SPEED * 0.7;
             }
-            // Keep CPU paddle on screen
             if (cpuY < 0) cpuY = 0;
             if (cpuY > GAME_HEIGHT - PADDLE_HEIGHT) cpuY = GAME_HEIGHT - PADDLE_HEIGHT;
         }
 
-
         function checkCollision() {
-            // Ball position relative to player (right side)
             const playerX = GAME_WIDTH - PADDLE_WIDTH - 20;
 
+            // Player Paddle Collision (right side)
             if (ballX > playerX - BALL_SIZE / 2 && ballX < playerX + PADDLE_WIDTH + BALL_SIZE / 2 && 
                 ballY > playerY && ballY < playerY + PADDLE_HEIGHT) 
             {
-                // Hit player paddle (right side)
                 ballSpeedX = -ballSpeedX;
             } 
             
-            // Ball position relative to CPU (left side)
             const cpuX = 20;
+            // CPU Paddle Collision (left side)
             if (ballX < cpuX + PADDLE_WIDTH + BALL_SIZE / 2 && ballX > cpuX - BALL_SIZE / 2 &&
                 ballY > cpuY && ballY < cpuY + PADDLE_HEIGHT)
             {
-                // Hit CPU paddle (left side)
                 ballSpeedX = -ballSpeedX;
             }
 
-            // Scoring (Ball goes past the paddle)
-            if (ballX < BALL_SIZE / 2) {
-                // CPU missed, Player scores
+            // Scoring
+            if (ballX < BALL_SIZE / 2) { // CPU scores
                 playerScore++;
                 checkWinCondition();
-                resetBall('cpu'); // CPU serves
-            } else if (ballX > GAME_WIDTH - BALL_SIZE / 2) {
-                // Player missed, CPU scores
+                resetBall('cpu'); 
+            } else if (ballX > GAME_WIDTH - BALL_SIZE / 2) { // Player scores
                 cpuScore++;
                 checkWinCondition();
-                resetBall('player'); // Player serves
+                resetBall('player'); 
             }
         }
 
         function checkWinCondition() {
             if (playerScore >= WINNING_SCORE) {
                 gameOver = true;
-                displayMessage('You Won!', 'Congratulations! Click to restart.', startGame);
+                displayMessage('You Won!', 'Congratulations! Tap anywhere to restart.', startGame);
             } else if (cpuScore >= WINNING_SCORE) {
                 gameOver = true;
-                displayMessage('You Lost!', 'Better luck next time. Click to restart.', startGame);
+                displayMessage('You Lost!', 'Better luck next time. Tap anywhere to restart.', startGame);
             }
         }
 
         function gameLoop() {
             if (!gameRunning || gameOver) return;
-
-            // 1. Logic
             moveBall();
             computerMovement();
             checkCollision();
-
-            // 2. Drawing
             drawEverything();
             drawScores();
-
-            // 3. Loop
             requestAnimationFrame(gameLoop);
         }
 
@@ -252,64 +237,59 @@
 
             const messageBox = document.createElement('div');
             messageBox.id = 'game-message';
-            // Use flex-col and p-4 on message-box (defined in CSS)
             messageBox.className = 'message-box';
             
-            // Use compact formatting
             messageBox.innerHTML = `
                 <h2 class="text-3xl font-extrabold mb-3 text-yellow-400 text-center">${title}</h2>
                 <p class="text-sm mb-4 text-center px-2">${text}</p>
                 <button class="start-button">
-                    START GAME
+                    TAP TO START
                 </button>
             `;
-            // Append message box to the container (not the body)
             container.appendChild(messageBox);
             
-            messageBox.querySelector('.start-button').addEventListener('click', () => {
-                messageBox.remove();
+            const startHandler = (e) => {
+                e.stopPropagation(); 
+                messageBox.removeEventListener('click', startHandler);
+                messageBox.removeEventListener('touchstart', startHandler);
                 action();
-            });
+            };
+
+            messageBox.addEventListener('click', startHandler);
+            messageBox.addEventListener('touchstart', startHandler);
         }
 
 
-        // --- Responsiveness and Input Handling (CRITICAL FIXES HERE) ---
+        // --- Responsiveness and Input Handling ---
 
         function handleResize() {
             // Set internal drawing size
             canvas.width = GAME_WIDTH;
             canvas.height = GAME_HEIGHT;
 
-            // Get current dimensions of non-canvas elements to calculate available space
-            const containerRect = container.getBoundingClientRect();
+            // Step 1: Calculate the total vertical space taken up by non-canvas elements
+            const overheadTop = canvas.offsetTop; 
             
-            // Calculate height of fixed elements (Title, Score, Touch Bar, and vertical margins/padding)
-            const titleHeight = titleElement.offsetHeight;
-            const scoreHeight = scoreDisplay.offsetHeight;
-            const touchHeight = touchArea.offsetHeight;
+            // Step 2: Calculate the height of elements below the canvas (score + its margin)
+            const overheadBottom = scoreDisplay.getBoundingClientRect().height + 20; 
             
-            // Estimate total vertical fixed overhead (Title + Score + Touch + margins/padding between them)
-            // Use 40px padding (8px border + 16px container padding) + estimated component margins (20px)
-            const totalFixedVerticalOverhead = titleHeight + scoreHeight + touchHeight + 50; 
-            
-            const availableHeight = containerRect.height - totalFixedVerticalOverhead;
-            const availableWidth = containerRect.width - 32; // Container width minus horizontal padding
+            // Step 3: Calculate the available height for the canvas
+            const availableHeight = container.clientHeight - overheadTop - overheadBottom;
+            const availableWidth = container.clientWidth - 32; // Container width minus horizontal padding (p-4 * 2 = 32px)
 
-            // Determine the scale factor based on the smaller dimension (the constraint)
+            // Step 4: Determine the scale factor based on the smaller dimension (the constraint)
             const scaleX = availableWidth / GAME_WIDTH;
             const scaleY = availableHeight / GAME_HEIGHT;
             
-            // Lesson Learned I.3: Use Math.min to ensure the canvas fits perfectly within the smallest constraint
             scaleFactor = Math.min(scaleX, scaleY);
             
-            // Apply the calculated external dimensions to the canvas style
+            // Step 5: Apply the calculated external dimensions to the canvas style
             const finalWidth = GAME_WIDTH * scaleFactor;
             const finalHeight = GAME_HEIGHT * scaleFactor;
             
             canvas.style.width = `${finalWidth}px`;
             canvas.style.height = `${finalHeight}px`;
 
-            // CRITICAL: Redraw everything to ensure initial state is visible after resize
             drawEverything();
             drawScores();
         }
@@ -317,9 +297,8 @@
         // Mouse/Touch Input Handler
         function handlePaddleMove(e) {
             if (!gameRunning || gameOver) return;
-            e.preventDefault(); // Lesson Learned II.3: Prevent scrolling/panning on touch
+            e.preventDefault(); 
             
-            // Determine client Y from mouse or touch
             let clientY = 0;
             if (e.touches && e.touches.length > 0) {
                 clientY = e.touches[0].clientY;
@@ -329,28 +308,20 @@
                 return;
             }
 
-            // Calculate the position of the canvas on the screen
             const canvasRect = canvas.getBoundingClientRect();
-            
-            // Calculate the position of the touch/mouse event relative to the internal canvas dimensions
+            // Calculate position within the internal canvas drawing coordinates
             const touchY = (clientY - canvasRect.top) / scaleFactor;
-            
-            // Calculate the new paddle position (center the paddle on the touch/mouse Y)
             const newPlayerY = touchY - (PADDLE_HEIGHT / 2);
             
-            // Clamp the paddle position to stay within the game boundaries
             playerY = Math.max(0, Math.min(GAME_HEIGHT - PADDLE_HEIGHT, newPlayerY));
         }
 
         // Attach listeners
         window.addEventListener('resize', handleResize);
         window.addEventListener('load', () => {
-            // IMPORTANT: Call handleResize after all elements are rendered
-            // Using a small timeout to ensure the DOM has finished calculating element heights
             setTimeout(() => {
                 handleResize();
-                // Start the game with the message box
-                displayMessage('Welcome to Pong!', 'Drag the green paddle (right) up and down to start the match. The first to 5 points wins.', startGame);
+                displayMessage('Welcome to Pong!', 'Drag the green paddle (right) up and down to play. First to 5 points wins! Tap anywhere to begin!', startGame);
             }, 100);
         });
 
@@ -358,7 +329,7 @@
         canvas.addEventListener('touchmove', handlePaddleMove);
         canvas.addEventListener('touchstart', (e) => {
             handlePaddleMove(e);
-            e.preventDefault(); // Prevent scrolling on touch
+            e.preventDefault();
         });
 
     </script>
