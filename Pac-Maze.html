@@ -192,7 +192,6 @@ canvas {
     const SCATTER_DURATION = 7 * 60;
     const CHASE_DURATION = 20 * 60; 
     
-    // Ghost Start Point 
     const GHOST_START_GRID = { x: 5, y: 3 }; 
     const GHOST_COLORS = ['red', 'pink', 'cyan', 'orange'];
     let GHOST_BEHAVIORS = [];
@@ -202,6 +201,7 @@ canvas {
         col: 5, row: 11,
         x: 0, y: 0, 
         targetX: 0, targetY: 0,
+        nextCol: 5, nextRow: 11, // NEW: Tracks the grid destination
         radius: 0,
         direction: 'UP', 
         requestedDirection: 'UP',
@@ -220,23 +220,8 @@ canvas {
     const getRandomEmoji = () => VICTORY_EMOJIS[Math.floor(Math.random() * VICTORY_EMOJIS.length)];
 
     /**
-     * FIX: Use squared distance and a small epsilon for robust floating point comparison
-     * This ensures the entity is perfectly snapped to the grid center on arrival.
+     * UPDATED: Now stores the intended grid destination.
      */
-    const isAtTarget = (entity) => {
-        // A very small squared tolerance to account for floating point errors
-        const EPSILON_SQUARED = 0.001 * 0.001; 
-        const dx = entity.x - entity.targetX;
-        const dy = entity.y - entity.targetY;
-        return (dx * dx + dy * dy) < EPSILON_SQUARED; 
-    };
-    
-    const isWallAtGrid = (col, row) => {
-        if (row >= 0 && row < MAP_HEIGHT && col >= 0 && col < MAP_WIDTH) {
-            return MAP[row][col] === 1;
-        }
-        return true; 
-    };
     const setNextTarget = (entity, dir) => {
         let newCol = entity.col;
         let newRow = entity.row;
@@ -252,6 +237,11 @@ canvas {
             const { x, y } = getCenterPixel(newCol, newRow);
             entity.targetX = x;
             entity.targetY = y;
+            
+            // CRITICAL: Store the intended grid coordinates to update 'col' and 'row' on arrival
+            entity.nextCol = newCol; 
+            entity.nextRow = newRow;
+
             entity.direction = dir;
             entity.moving = true;
             return true;
@@ -259,6 +249,13 @@ canvas {
         
         entity.moving = false;
         return false;
+    };
+    
+    const isWallAtGrid = (col, row) => {
+        if (row >= 0 && row < MAP_HEIGHT && col >= 0 && col < MAP_WIDTH) {
+            return MAP[row][col] === 1;
+        }
+        return true; 
     };
 
 
@@ -281,7 +278,8 @@ canvas {
                 name: behavior.name, color: colorPool[index], 
                 scatterTarget: behavior.scatterTarget, targetFn: behavior.targetFn,
                 col: GHOST_START_GRID.x, row: GHOST_START_GRID.y,
-                direction: 'LEFT', moving: true
+                direction: 'LEFT', moving: true,
+                nextCol: GHOST_START_GRID.x, nextRow: GHOST_START_GRID.y // Initialize
             };
             const { x: gx, y: gy } = getCenterPixel(g.col, g.row);
             g.x = gx; g.y = gy;
@@ -311,9 +309,6 @@ canvas {
         return ghost.targetFn();
     };
 
-    /**
-     * Ghost Direction Logic 
-     */
     const getGhostDirection = (ghost) => {
         const target = getTargetTile(ghost);
         const possibleMoves = [
@@ -324,7 +319,6 @@ canvas {
         let minDistanceSq = Infinity;
         let validMoves = [];
 
-        // 1. Determine all valid non-U-turn moves
         for (const move of possibleMoves) {
             const nextGridX = ghost.col + move.dx;
             const nextGridY = ghost.row + move.dy;
@@ -342,7 +336,6 @@ canvas {
             }
         }
         
-        // 2. Select the best non-U-turn move (closest to target)
         for (const moveData of validMoves) {
             if (moveData.distSq < minDistanceSq) {
                 minDistanceSq = moveData.distSq;
@@ -350,7 +343,6 @@ canvas {
             }
         }
 
-        // 3. Fallback: If no non-U-turn move exists, force a U-turn 
         if (bestMove === null) {
             const reverseMap = { 'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT' };
             bestMove = reverseMap[ghost.direction] || ghost.direction;
@@ -382,6 +374,8 @@ canvas {
              entity.y = y;
              entity.targetX = x;
              entity.targetY = y;
+             entity.nextCol = entity.col;
+             entity.nextRow = entity.row;
              entity.radius = TILE_SIZE / 2 - 2;
         };
         
@@ -397,23 +391,7 @@ canvas {
         }
     }
     
-    // --- DRAWING COLORS ---
-    function updateWallColor() {
-        if (gameState === 'WIN') {
-            canvas.style.borderColor = VICTORY_COLOR;
-            canvas.style.boxShadow = `0 0 20px ${VICTORY_COLOR}`;
-            return { wallColor: 'transparent', lineColor: 'transparent' };
-        }
-
-        const wallColor = gameMode === 'CHASE' ? WALL_COLOR_CHASE : WALL_COLOR_SCATTER;
-        const lineColor = gameMode === 'CHASE' ? WALL_LINE_CHASE : WALL_LINE_SCATTER;
-        canvas.style.borderColor = wallColor;
-        canvas.style.boxShadow = `0 0 20px ${wallColor}`;
-        
-        return { wallColor, lineColor };
-    }
-    
-    // --- MOVEMENT LOGIC ---
+    // --- MOVEMENT LOGIC (CRITICAL FIX) ---
     function moveEntity(entity, speed) {
         if (!entity.moving) return false;
         const dx = entity.targetX - entity.x;
@@ -422,20 +400,25 @@ canvas {
         
         if (dist > 0) {
             const step = Math.min(speed, dist);
-            entity.x += (dx / dist) * step;
-            entity.y += (dy / dist) * step;
             
-            if (isAtTarget(entity)) {
-                // Snap to target to ensure perfect grid alignment
+            // Check for arrival by comparing step distance to remaining distance.
+            // This is the robust floating-point check.
+            if (step >= dist - 0.001) { 
+                // Snap to target and update grid position using stored coordinates
                 entity.x = entity.targetX; 
                 entity.y = entity.targetY;
-                // Recalculate grid position based on the snapped pixel position
-                entity.col = Math.floor(entity.x / TILE_SIZE);
-                entity.row = Math.floor(entity.y / TILE_SIZE);
-                return true;
+                entity.col = entity.nextCol; // Snap to guaranteed integer grid position
+                entity.row = entity.nextRow;
+                return true; // Arrived
+            } else {
+                // Not arrived, move the step distance
+                entity.x += (dx / dist) * step;
+                entity.y += (dy / dist) * step;
+                return false;
             }
         }
-        return false;
+        // If dist is 0, we are already at the target
+        return true; 
     }
     
     function moveEntityToCenter(entity, speed = 2) {
@@ -539,6 +522,8 @@ canvas {
             const { x, y } = getCenterPixel(pacman.col, pacman.row);
             pacman.x = x; pacman.y = y;
             pacman.targetX = x; pacman.targetY = y;
+            pacman.nextCol = pacman.col; 
+            pacman.nextRow = pacman.row; 
             setNextTarget(pacman, pacman.direction);
             
             gameState = 'RUNNING'; 
@@ -584,6 +569,8 @@ canvas {
         pacman.isCelebrating = false;
         const { x, y } = getCenterPixel(pacman.col, pacman.row);
         pacman.x = x; pacman.y = y;
+        pacman.nextCol = pacman.col; 
+        pacman.nextRow = pacman.row; 
         setNextTarget(pacman, pacman.direction); 
 
         initializeGhosts();
@@ -594,9 +581,6 @@ canvas {
         hideGameMessage();
     }
     
-    /**
-     * Dedicated function to ensure the game loop is running and clean.
-     */
     function startGameLoop() {
         if (gameLoopInterval) {
             clearInterval(gameLoopInterval);
@@ -604,9 +588,6 @@ canvas {
         gameLoopInterval = setInterval(gameLoop, 1000 / 60);
     }
 
-    /**
-     * Public function called by the "Play Again" button and on initial start.
-     */
     window.resetGameAndStart = function() {
         resetGame();
         gameState = 'RUNNING'; 
@@ -656,7 +637,21 @@ canvas {
         showEndGameScreen(titleText, score, titleColor);
     }
     
-    // --- DRAWING FUNCTIONS (omitted for brevity, assume unchanged) ---
+    // --- DRAWING FUNCTIONS ---
+    function updateWallColor() {
+        if (gameState === 'WIN') {
+            canvas.style.borderColor = VICTORY_COLOR;
+            canvas.style.boxShadow = `0 0 20px ${VICTORY_COLOR}`;
+            return { wallColor: 'transparent', lineColor: 'transparent' };
+        }
+
+        const wallColor = gameMode === 'CHASE' ? WALL_COLOR_CHASE : WALL_COLOR_SCATTER;
+        const lineColor = gameMode === 'CHASE' ? WALL_LINE_CHASE : WALL_LINE_SCATTER;
+        canvas.style.borderColor = wallColor;
+        canvas.style.boxShadow = `0 0 20px ${wallColor}`;
+        
+        return { wallColor, lineColor };
+    }
     function drawMap() {
         const { wallColor, lineColor } = updateWallColor();
         for (let r = 0; r < MAP_HEIGHT; r++) {
@@ -664,7 +659,7 @@ canvas {
                 const x = c * TILE_SIZE;
                 const y = r * TILE_SIZE;
 
-                if (MAP[r][c] === 1) { // Wall
+                if (MAP[r][c] === 1) { 
                     if (gameState !== 'WIN') { 
                         ctx.fillStyle = wallColor;
                         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
@@ -674,7 +669,7 @@ canvas {
                         ctx.fillStyle = '#000';
                         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
                     }
-                } else if (MAP[r][c] === 0) { // Dot
+                } else if (MAP[r][c] === 0) { 
                     ctx.fillStyle = 'white';
                     ctx.beginPath();
                     ctx.arc(x + TILE_SIZE / 2, y + TILE_SIZE / 2, TILE_SIZE / 10, 0, Math.PI * 2);
@@ -690,7 +685,7 @@ canvas {
         let drawY = pacman.y;
         
         if (gameState === 'WIN') {
-            const isCentered = isAtTarget(pacman);
+            const isCentered = Math.abs(drawX - pacman.targetX) < 1;
             const wiggleOffset = isCentered ? Math.sin(frameCounter * 0.4) * 5 : 0; 
             drawX += wiggleOffset;
             ctx.fillStyle = 'yellow';
@@ -705,21 +700,18 @@ canvas {
         }
 
         if (gameState === 'LOSE' || gameState === 'PAUSED_DEATH') {
-            // Draw Defeated Pac-Man (Yellow Ghost)
             ctx.fillStyle = 'yellow';
             ctx.beginPath();
             ctx.arc(drawX, drawY, radius, Math.PI, 0, false);
             ctx.rect(drawX - radius, drawY, radius * 2, radius * 1.5);
             ctx.fill();
 
-            // Add white eyes
             ctx.fillStyle = 'white';
             ctx.beginPath();
             ctx.arc(drawX - radius * 0.3, drawY - radius * 0.1, radius * 0.2, 0, Math.PI * 2);
             ctx.arc(drawX + radius * 0.3, drawY - radius * 0.1, radius * 0.2, 0, Math.PI * 2);
             ctx.fill();
             
-            // Pupil color is blue to match other ghosts
             ctx.fillStyle = 'blue'; 
             ctx.beginPath();
             ctx.arc(drawX - radius * 0.3, drawY - radius * 0.1, radius * 0.1, 0, Math.PI * 2);
@@ -729,7 +721,6 @@ canvas {
             return;
         }
 
-        // Standard Pac-Man Drawing
         ctx.fillStyle = 'yellow';
         ctx.beginPath();
         let baseAngle = 0;
@@ -759,11 +750,9 @@ canvas {
             const centerY = ghost.y;
             ctx.fillStyle = ghost.color;
             ctx.beginPath();
-            // Ghost body (Arc and Rectangle)
             ctx.arc(centerX, centerY, radius, Math.PI, 0, false);
             ctx.rect(centerX - radius, centerY, radius * 2, radius * 1.5);
             
-            // Draw skirt/feet (scalloped bottom)
             const footSize = radius / 3;
             ctx.lineTo(centerX + radius, centerY + radius * 1.5);
             ctx.lineTo(centerX + radius - footSize, centerY + radius * 1.5 - footSize);
@@ -774,7 +763,6 @@ canvas {
 
             ctx.fill();
             
-            // Draw eyes (Standard Blue Eyes)
             ctx.fillStyle = 'white';
             ctx.beginPath();
             ctx.arc(centerX - radius * 0.3, centerY - radius * 0.1, radius * 0.2, 0, Math.PI * 2);
@@ -859,7 +847,6 @@ canvas {
         const deltaY = touchEndY - touchStartY;
 
         if (Math.abs(deltaX) > swipeThreshold || Math.abs(deltaY) > swipeThreshold) {
-            // It's a swipe
             if (Math.abs(deltaX) > Math.abs(deltaY)) {
                 if (deltaX > 0) { setRequestedDirection('RIGHT'); } 
                 else { setRequestedDirection('LEFT'); }
@@ -868,9 +855,8 @@ canvas {
                 else { setRequestedDirection('UP'); }
             }
         } else {
-             // It's a tap (or small drag)
+             // Treat a tap as an initial 'UP' move to start the game
              if (gameState === 'PAUSED_START' && lives > 0) {
-                 // Treat a tap as an initial 'UP' move to start the game
                  setRequestedDirection('UP');
              }
         }
@@ -900,9 +886,8 @@ canvas {
     // --- INITIALIZATION ---
     function initialize() {
         resizeCanvas(); 
-        resetGame(); // Start in clean state
+        resetGame(); 
         
-        // Only show the start message on the very first load
         if (isFirstGame) {
             gameState = 'PAUSED_START';
             showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️'); 
