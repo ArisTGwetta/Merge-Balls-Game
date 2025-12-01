@@ -182,12 +182,12 @@ canvas {
     // --- GAME STATE AND ENTITIES ---
     let score = 0; 
     let lives = 3; 
-    let gameLoopInterval = null; // Initialize as null for clean checking
+    let gameLoopInterval = null; 
     let gameMode = 'SCATTER'; 
     let gameState = 'PAUSED_START';
     let modeTimer = 0;
     let frameCounter = 0;
-    let isFirstGame = true; // Flag for initial start message
+    let isFirstGame = true; 
 
     const SCATTER_DURATION = 7 * 60;
     const CHASE_DURATION = 20 * 60; 
@@ -219,9 +219,18 @@ canvas {
     });
     const getRandomEmoji = () => VICTORY_EMOJIS[Math.floor(Math.random() * VICTORY_EMOJIS.length)];
 
+    /**
+     * FIX: Use squared distance and a small epsilon for robust floating point comparison
+     * This ensures the entity is perfectly snapped to the grid center on arrival.
+     */
     const isAtTarget = (entity) => {
-        return Math.abs(entity.x - entity.targetX) < 1 && Math.abs(entity.y - entity.targetY) < 1;
+        // A very small squared tolerance to account for floating point errors
+        const EPSILON_SQUARED = 0.001 * 0.001; 
+        const dx = entity.x - entity.targetX;
+        const dy = entity.y - entity.targetY;
+        return (dx * dx + dy * dy) < EPSILON_SQUARED; 
     };
+    
     const isWallAtGrid = (col, row) => {
         if (row >= 0 && row < MAP_HEIGHT && col >= 0 && col < MAP_WIDTH) {
             return MAP[row][col] === 1;
@@ -303,7 +312,7 @@ canvas {
     };
 
     /**
-     * Ghost Direction Logic - Includes Unsticking Fix
+     * Ghost Direction Logic 
      */
     const getGhostDirection = (ghost) => {
         const target = getTargetTile(ghost);
@@ -341,7 +350,7 @@ canvas {
             }
         }
 
-        // 3. Fallback: If no non-U-turn move exists, force a U-turn (the only way out)
+        // 3. Fallback: If no non-U-turn move exists, force a U-turn 
         if (bestMove === null) {
             const reverseMap = { 'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT' };
             bestMove = reverseMap[ghost.direction] || ghost.direction;
@@ -367,6 +376,7 @@ canvas {
         pacman.radius = TILE_SIZE / 2 - 2;
 
         const resetEntityPosition = (entity) => {
+             // Ensure entities are perfectly aligned to the new center pixels on resize
              const { x, y } = getCenterPixel(entity.col, entity.row);
              entity.x = x;
              entity.y = y;
@@ -409,13 +419,17 @@ canvas {
         const dx = entity.targetX - entity.x;
         const dy = entity.targetY - entity.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+        
         if (dist > 0) {
             const step = Math.min(speed, dist);
             entity.x += (dx / dist) * step;
             entity.y += (dy / dist) * step;
+            
             if (isAtTarget(entity)) {
-                entity.x = entity.targetX;
+                // Snap to target to ensure perfect grid alignment
+                entity.x = entity.targetX; 
                 entity.y = entity.targetY;
+                // Recalculate grid position based on the snapped pixel position
                 entity.col = Math.floor(entity.x / TILE_SIZE);
                 entity.row = Math.floor(entity.y / TILE_SIZE);
                 return true;
@@ -581,7 +595,7 @@ canvas {
     }
     
     /**
-     * FIX 1: Dedicated function to ensure the game loop is running and clean.
+     * Dedicated function to ensure the game loop is running and clean.
      */
     function startGameLoop() {
         if (gameLoopInterval) {
@@ -591,8 +605,7 @@ canvas {
     }
 
     /**
-     * Public function called by the "Play Again" button.
-     * FIX 2: Ensures a clean reset and GUARANTEES the game loop is running.
+     * Public function called by the "Play Again" button and on initial start.
      */
     window.resetGameAndStart = function() {
         resetGame();
@@ -625,7 +638,7 @@ canvas {
         if (!won) { 
             clearInterval(gameLoopInterval); 
             gameLoopInterval = null; 
-        } // Only stop on LOSE, WIN continues to draw the celebration in the loop
+        } 
         gameState = won ? 'WIN' : 'LOSE';
         updateWallColor();
         
@@ -643,7 +656,7 @@ canvas {
         showEndGameScreen(titleText, score, titleColor);
     }
     
-    // --- DRAWING FUNCTIONS ---
+    // --- DRAWING FUNCTIONS (omitted for brevity, assume unchanged) ---
     function drawMap() {
         const { wallColor, lineColor } = updateWallColor();
         for (let r = 0; r < MAP_HEIGHT; r++) {
@@ -775,7 +788,6 @@ canvas {
         });
     }
 
-    // --- STATUS MESSAGES ---
     function showGameMessage(text, emoji = null) {
         let content = '';
         if (emoji) { content += `<span class="huge-emoji">${emoji}</span>`; }
@@ -795,6 +807,7 @@ canvas {
     function hideGameMessage() {
         messageEl.style.display = 'none';
     }
+    // --- END DRAWING FUNCTIONS ---
 
     // --- INPUT HANDLERS ---
     function setRequestedDirection(direction) {
@@ -826,3 +839,82 @@ canvas {
             e.preventDefault(); 
         });
     });
+
+    // --- SWIPE INPUT HANDLERS ---
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const swipeThreshold = 50; 
+
+    canvas.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        e.preventDefault(); 
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+
+        if (Math.abs(deltaX) > swipeThreshold || Math.abs(deltaY) > swipeThreshold) {
+            // It's a swipe
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                if (deltaX > 0) { setRequestedDirection('RIGHT'); } 
+                else { setRequestedDirection('LEFT'); }
+            } else {
+                if (deltaY > 0) { setRequestedDirection('DOWN'); } 
+                else { setRequestedDirection('UP'); }
+            }
+        } else {
+             // It's a tap (or small drag)
+             if (gameState === 'PAUSED_START' && lives > 0) {
+                 // Treat a tap as an initial 'UP' move to start the game
+                 setRequestedDirection('UP');
+             }
+        }
+    }, { passive: false });
+
+
+    // --- MAIN GAME LOOP ---
+    function gameLoop() {
+        frameCounter++;
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+
+        drawMap();
+
+        if (gameState === 'RUNNING') {
+            switchGameMode();
+            updatePacmanPosition();
+            moveGhosts();
+            checkGhostCollision();
+        } else if (gameState === 'WIN') {
+            moveEntityToCenter(pacman);
+        }
+
+        drawGhosts();
+        drawPacman();
+    }
+    
+    // --- INITIALIZATION ---
+    function initialize() {
+        resizeCanvas(); 
+        resetGame(); // Start in clean state
+        
+        // Only show the start message on the very first load
+        if (isFirstGame) {
+            gameState = 'PAUSED_START';
+            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️'); 
+        }
+
+        window.addEventListener('resize', resizeCanvas); 
+        
+        startGameLoop();
+    }
+
+    window.onload = initialize;
+
+</script>
+</body>
+</html>
