@@ -1,119 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pac-Man Maze Runner</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            /* Disable touch scrolling/zooming for a better game experience */
-            touch-action: none; 
-            @apply bg-gray-900 text-white min-h-screen flex items-center justify-center p-4;
-        }
-        canvas {
-            background-color: #000;
-            /* Initial border color will be set by JS based on mode */
-            border: 4px solid #3b82f6; 
-            box-shadow: 0 0 20px #3b82f6;
-            border-radius: 1rem;
-            transition: border-color 0.5s ease-in-out, box-shadow 0.5s ease-in-out;
-        }
-        .game-container {
-            @apply flex flex-col items-center justify-center p-4 rounded-xl shadow-2xl;
-            max-width: 600px;
-            width: 95%;
-        }
-        .control-button {
-            @apply p-3 m-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full shadow-lg transition duration-150 transform hover:scale-105;
-            width: 60px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            user-select: none;
-        }
-        .mode-display {
-            @apply text-sm font-semibold p-1 rounded-full px-3 transition-colors duration-500;
-        }
-        .pause-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: rgba(0, 0, 0, 0.5);
-            color: white;
-            font-size: 2rem;
-            font-weight: bold;
-            border-radius: 1rem;
-            text-shadow: 0 0 10px #ffcc00;
-        }
-    </style>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* CSS for Responsiveness and Styling */
+body {
+    font-family: 'Inter', sans-serif;
+    @apply bg-gray-900 text-white min-h-screen flex items-center justify-center p-4;
+    margin: 0;
+    padding: 1rem;
+    box-sizing: border-box;
+    user-select: none;
+    touch-action: none; 
+}
+
+#app-container {
+    @apply flex flex-col items-center justify-center p-4 rounded-xl shadow-2xl;
+    width: 100%;
+    max-width: 600px;
+    background-color: #2d3748;
+    border-radius: 16px;
+    box-shadow: 0 10px 15px rgba(0, 0, 0, 0.5);
+    padding: 1rem;
+}
+
+#game-container {
+    position: relative;
+    width: 90vw; 
+    max-width: 500px;
+    aspect-ratio: 1 / 1; 
+    margin-bottom: 1rem;
+    border: 4px solid #f6e05e; 
+    border-radius: 8px;
+    overflow: hidden;
+    flex-grow: 0; 
+}
+
+canvas {
+    display: block;
+    width: 100%; 
+    height: 100%;
+    background-color: #000; 
+    border: 4px solid #3b82f6; 
+    box-shadow: 0 0 20px #3b82f6; 
+    border-radius: 1rem; 
+    transition: border-color 0.5s ease-in-out, box-shadow 0.5s ease-in-out;
+}
+
+.pause-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    font-size: 1.5rem; 
+    font-weight: bold;
+    line-height: 1.4;
+    display: none;
+}
+
+#message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    text-align: center;
+    padding: 1.5rem 2.5rem;
+    background-color: rgba(0, 0, 0, 0.9);
+    border: 3px solid #63b3ed;
+    border-radius: 12px;
+    color: #fff;
+    /* FIX 1: Reduced font size for start/end game message box */
+    font-size: 1.25rem; 
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+    display: none; 
+}
+
+.huge-emoji {
+    /* FIX 1: Reduced emoji size */
+    font-size: 2.5rem; 
+    line-height: 1;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.text-pacman-yellow {
+    color: #f6e05e;
+    border-radius: 1rem;
+    text-shadow: 0 0 10px #ffcc00;
+}
+
+.control-button {
+    @apply p-3 m-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full shadow-lg transition duration-150 transform hover:scale-105;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.restart-button {
+    @apply mt-4 p-3 bg-green-500 rounded-lg shadow-md hover:bg-green-600 transition duration-150;
+    font-size: 1.25rem;
+}
+</style>
 </head>
 <body>
 
-<div class="game-container">
-    <div id="game-info" class="mb-4 text-center">
-        <h1 class="text-3xl font-extrabold text-yellow-400">PAC-MAZE RUNNER</h1>
-        <p class="text-xl mt-2">Score: <span id="score">0</span> | Lives: <span id="lives">3</span> | Mode: <span id="mode-display" class="mode-display bg-green-800">SCATTER</span></p>
-    </div>
-
-    <div style="position: relative;">
-        <canvas id="gameCanvas"></canvas>
-        <div id="pause-message" class="pause-overlay hidden">
-            <!-- Message content updated by JS -->
+    <div id="app-container">
+        <h1 class="text-3xl font-extrabold mb-4 text-pacman-yellow">PAC-MAZE RUNNER</h1>
+        
+        <div id="game-container">
+            <canvas id="gameCanvas"></canvas>
+            
+            <div id="message" class="transition-opacity duration-300"></div>
+            <div id="pause-message" class="pause-overlay hidden"></div>
         </div>
-    </div>
 
-
-    <div id="controls" class="mt-6 w-full flex flex-col items-center">
-        <div class="flex justify-center">
-            <button class="control-button" data-dir="UP">⬆️</button>
-        </div>
-        <div class="flex justify-center">
-            <button class="control-button" data-dir="LEFT">⬅️</button>
-            <div class="w-[60px] h-[60px] m-1"></div>
-            <button class="control-button" data-dir="RIGHT">➡️</button>
-        </div>
-        <div class="flex justify-center">
-            <button class="control-button" data-dir="DOWN">⬇️</button>
+        <div id="controls" class="mt-6 w-full flex flex-col items-center">
+            <div class="flex justify-center">
+                <button class="control-button" data-dir="UP">⬆️</button>
+            </div>
+            <div class="flex justify-center">
+                <button class="control-button" data-dir="LEFT">⬅️</button>
+                <div class="w-[60px] h-[60px] m-1"></div> <button class="control-button" data-dir="RIGHT">➡️</button>
+            </div>
+            <div class="flex justify-center">
+                <button class="control-button" data-dir="DOWN">⬇️</button>
+            </div>
         </div>
     </div>
-</div>
 
 <script>
     // --- CANVAS AND CONTEXT SETUP ---
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const messageEl = document.getElementById('message');
     const pauseMessage = document.getElementById('pause-message');
-    
+
     // --- GAME CONFIGURATION ---
-    const TILE_SIZE = 40; 
+    let TILE_SIZE; 
     const MAP_WIDTH = 11;
     const MAP_HEIGHT = 13;
     const SPEED = 1.5; 
-    const GHOST_SPEED = 1.5; 
-    
-    // Wall colors for visual mode change
+    const GHOST_SPEED = 1.5;
+    // Colors
     const WALL_COLOR_SCATTER = '#3b82f6'; 
-    const WALL_COLOR_CHASE = '#8b5cf6';   
+    const WALL_COLOR_CHASE = '#8b5cf6';
     const WALL_LINE_SCATTER = '#0e46a7';
     const WALL_LINE_CHASE = '#6d28d9';
-    const VICTORY_COLOR = '#10b981'; // Green for win
-
-    // Set canvas dimensions
-    canvas.width = MAP_WIDTH * TILE_SIZE;
-    canvas.height = MAP_HEIGHT * TILE_SIZE;
-    // Set pause overlay dimensions
-    pauseMessage.style.width = canvas.width + 'px';
-    pauseMessage.style.height = canvas.height + 'px';
-
+    const VICTORY_COLOR = '#10b981';
 
     // Map Legend: 1=Wall, 0=Dot/Path, 2=Empty
     const INITIAL_MAP = [
@@ -131,67 +177,57 @@
         [1,0,0,0,1,0,1,0,0,0,1], 
         [1,1,1,1,1,1,1,1,1,1,1],
     ];
-
     let MAP = JSON.parse(JSON.stringify(INITIAL_MAP)); 
 
-    // --- GAME STATE ---
-    let score = 0;
-    let lives = 3;
+    // --- GAME STATE AND ENTITIES ---
+    let score = 0; 
+    let lives = 3; 
     let gameLoopInterval;
     let gameMode = 'SCATTER'; 
-    // Possible states: 'RUNNING', 'PAUSED_DEATH', 'WIN', 'LOSE'
-    let gameState = 'RUNNING'; 
+    let gameState = 'PAUSED_START';
     let modeTimer = 0;
-    let frameCounter = 0; // For animations
-    const SCATTER_DURATION = 7 * 60; 
+    let frameCounter = 0;
+    let isFirstGame = true; // Flag for initial start message
+
+    const SCATTER_DURATION = 7 * 60;
     const CHASE_DURATION = 20 * 60; 
     
-    // Global Ghost Configs
+    // Ghost Start Point 
     const GHOST_START_GRID = { x: 5, y: 3 }; 
     const GHOST_COLORS = ['red', 'pink', 'cyan', 'orange'];
-    let GHOST_BEHAVIORS = []; 
-
-    // --- CELEBRATION CONFIG ---
+    let GHOST_BEHAVIORS = [];
     const VICTORY_EMOJIS = ['😎', '🥳', '🤩', '😉'];
 
-    // --- PLAYER STATE ---
     let pacman = {
         col: 5, row: 11,
         x: 0, y: 0, 
         targetX: 0, targetY: 0,
-        radius: TILE_SIZE / 2 - 2, 
+        radius: 0,
         direction: 'UP', 
         requestedDirection: 'UP',
         angle: { start: 0.25, end: 1.75 },
         moving: true,
-        // New celebration state properties
         isCelebrating: false,
         victoryEmoji: null 
     };
-
-    // --- GHOST STATE ---
-    let GHOSTS = []; 
-
+    let GHOSTS = [];
+    
     // --- UTILITIES ---
     const getCenterPixel = (col, row) => ({
         x: col * TILE_SIZE + TILE_SIZE / 2,
         y: row * TILE_SIZE + TILE_SIZE / 2, 
     });
-    
     const getRandomEmoji = () => VICTORY_EMOJIS[Math.floor(Math.random() * VICTORY_EMOJIS.length)];
 
     const isAtTarget = (entity) => {
-        // Use a small epsilon for floating point comparison
         return Math.abs(entity.x - entity.targetX) < 1 && Math.abs(entity.y - entity.targetY) < 1;
     };
-
     const isWallAtGrid = (col, row) => {
         if (row >= 0 && row < MAP_HEIGHT && col >= 0 && col < MAP_WIDTH) {
             return MAP[row][col] === 1;
         }
         return true; 
     };
-
     const setNextTarget = (entity, dir) => {
         let newCol = entity.col;
         let newRow = entity.row;
@@ -215,39 +251,28 @@
         entity.moving = false;
         return false;
     };
-    
-    // --- DYNAMIC GHOST SETUP ---
 
+
+    // --- GHOST AI ---
     function setupNewGameBehaviors() {
-        // Determine which ghost gets which AI role for this game
         const behaviorPool = [
-            { id: 'hunter', targetFn: targetPacman, scatterTarget: { x: MAP_WIDTH - 2, y: 1 } }, // Blinky's role
-            { id: 'ambusher', targetFn: targetAmbush, scatterTarget: { x: 1, y: 1 } } // Pinky's role
+            { id: 'hunter', targetFn: targetPacman, scatterTarget: { x: MAP_WIDTH - 2, y: 1 } },
+            { id: 'ambusher', targetFn: targetAmbush, scatterTarget: { x: 1, y: 1 } }
         ];
-        
-        // Randomly assign the roles to Ghost 0 and Ghost 1
-        const shuffledBehaviors = behaviorPool.sort(() => Math.random() - 0.5); 
+        const shuffledBehaviors = behaviorPool.sort(() => Math.random() - 0.5);
         GHOST_BEHAVIORS = [
             { name: 'Ghost A', behavior: shuffledBehaviors[0].id, targetFn: shuffledBehaviors[0].targetFn, scatterTarget: shuffledBehaviors[0].scatterTarget },
             { name: 'Ghost B', behavior: shuffledBehaviors[1].id, targetFn: shuffledBehaviors[1].targetFn, scatterTarget: shuffledBehaviors[1].scatterTarget }
         ];
     }
-    
     function initializeGhosts() {
-        // Assign random colors from the pool for this life/respawn
         const colorPool = [...GHOST_COLORS].sort(() => Math.random() - 0.5);
-        
         GHOSTS = GHOST_BEHAVIORS.map((behavior, index) => {
              const g = {
-                name: behavior.name,
-                // Assign a random color from the pool (index ensures they are different)
-                color: colorPool[index], 
-                scatterTarget: behavior.scatterTarget,
-                targetFn: behavior.targetFn, // The randomized AI function
-                
+                name: behavior.name, color: colorPool[index], 
+                scatterTarget: behavior.scatterTarget, targetFn: behavior.targetFn,
                 col: GHOST_START_GRID.x, row: GHOST_START_GRID.y,
-                direction: 'LEFT',
-                moving: true
+                direction: 'LEFT', moving: true
             };
             const { x: gx, y: gy } = getCenterPixel(g.col, g.row);
             g.x = gx; g.y = gy;
@@ -255,21 +280,11 @@
             return g;
         });
     }
-
-    // --- GHOST AI FUNCTIONS ---
-
-    // Behavior 1: Hunter (Blinky's original behavior)
-    function targetPacman() {
-        return { x: pacman.col, y: pacman.row };
-    }
-
-    // Behavior 2: Ambusher (Pinky's original behavior)
+    function targetPacman() { return { x: pacman.col, y: pacman.row }; }
     function targetAmbush() {
         const pGrid = { x: pacman.col, y: pacman.row };
-        let targetX = pGrid.x;
-        let targetY = pGrid.y;
+        let targetX = pGrid.x; let targetY = pGrid.y;
         const offset = 4;
-
         if (pacman.moving) {
             switch (pacman.direction) {
                 case 'UP': targetY -= offset; break;
@@ -278,73 +293,101 @@
                 case 'RIGHT': targetX += offset; break;
             }
         }
-        
         targetX = Math.max(1, Math.min(MAP_WIDTH - 2, targetX));
         targetY = Math.max(1, Math.min(MAP_HEIGHT - 2, targetY));
         return { x: targetX, y: targetY };
     }
-
-
     const getTargetTile = (ghost) => {
-        if (gameMode === 'SCATTER') {
-            return ghost.scatterTarget;
-        }
-        
-        // Use the assigned target function for CHASE mode
-        return ghost.targetFn(); 
+        if (gameMode === 'SCATTER') { return ghost.scatterTarget; }
+        return ghost.targetFn();
     };
 
+    /**
+     * Ghost Direction Logic - Includes Unsticking Fix
+     */
     const getGhostDirection = (ghost) => {
         const target = getTargetTile(ghost);
-        
         const possibleMoves = [
-            { dir: 'UP', dx: 0, dy: -1 },
-            { dir: 'DOWN', dx: 0, dy: 1 },
-            { dir: 'LEFT', dx: -1, dy: 0 },
-            { dir: 'RIGHT', dx: 1, dy: 0 }
+            { dir: 'UP', dx: 0, dy: -1 }, { dir: 'DOWN', dx: 0, dy: 1 },
+            { dir: 'LEFT', dx: -1, dy: 0 }, { dir: 'RIGHT', dx: 1, dy: 0 }
         ];
-
-        let bestMove = ghost.direction; 
+        let bestMove = null; 
         let minDistanceSq = Infinity;
+        let validMoves = [];
 
+        // 1. Determine all valid non-U-turn moves
         for (const move of possibleMoves) {
             const nextGridX = ghost.col + move.dx;
             const nextGridY = ghost.row + move.dy;
-
-            if (isWallAtGrid(nextGridX, nextGridY)) {
-                continue; 
-            }
-
+            if (isWallAtGrid(nextGridX, nextGridY)) { continue; }
+            
             const isUTurn = (
                 (ghost.direction === 'UP' && move.dir === 'DOWN') ||
                 (ghost.direction === 'DOWN' && move.dir === 'UP') ||
                 (ghost.direction === 'LEFT' && move.dir === 'RIGHT') ||
                 (ghost.direction === 'RIGHT' && move.dir === 'LEFT')
             );
-            if (isUTurn) continue;
 
-            const distSq = Math.pow(target.x - nextGridX, 2) + Math.pow(target.y - nextGridY, 2);
-
-            if (distSq < minDistanceSq) {
-                minDistanceSq = distSq;
-                bestMove = move.dir;
+            if (!isUTurn) {
+                validMoves.push({ move, distSq: Math.pow(target.x - nextGridX, 2) + Math.pow(target.y - nextGridY, 2) });
             }
         }
         
-        if (minDistanceSq === Infinity) {
-             const reverseMap = { 'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT' };
-             const reverseDir = reverseMap[ghost.direction];
+        // 2. Select the best non-U-turn move (closest to target)
+        for (const moveData of validMoves) {
+            if (moveData.distSq < minDistanceSq) {
+                minDistanceSq = moveData.distSq;
+                bestMove = moveData.move.dir;
+            }
+        }
 
-             if (setNextTarget(ghost, reverseDir)) {
-                 return reverseDir;
-             }
+        // 3. Fallback: If no non-U-turn move exists, force a U-turn (the only way out)
+        if (bestMove === null) {
+            const reverseMap = { 'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT' };
+            bestMove = reverseMap[ghost.direction] || ghost.direction;
         }
 
         return bestMove; 
     };
 
-    // --- UPDATE FUNCTIONS ---
+    // --- CORE RESPONSIBLE RESIZING FUNCTION ---
+    function resizeCanvas() {
+        const container = document.getElementById('game-container');
+        const containerWidth = container.clientWidth;
+        
+        TILE_SIZE = Math.floor(containerWidth / MAP_WIDTH);
+        
+        if (TILE_SIZE < 1) { 
+            TILE_SIZE = 1;
+        }
+
+        canvas.width = MAP_WIDTH * TILE_SIZE;
+        canvas.height = MAP_HEIGHT * TILE_SIZE;
+        
+        pacman.radius = TILE_SIZE / 2 - 2;
+
+        const resetEntityPosition = (entity) => {
+             const { x, y } = getCenterPixel(entity.col, entity.row);
+             entity.x = x;
+             entity.y = y;
+             entity.targetX = x;
+             entity.targetY = y;
+             entity.radius = TILE_SIZE / 2 - 2;
+        };
+        
+        resetEntityPosition(pacman);
+        GHOSTS.forEach(resetEntityPosition);
+
+        pauseMessage.style.width = canvas.width + 'px';
+        pauseMessage.style.height = canvas.height + 'px';
+        
+        if (gameState === 'WIN') {
+            pacman.targetX = canvas.width / 2;
+            pacman.targetY = canvas.height / 2;
+        }
+    }
     
+    // --- DRAWING COLORS ---
     function updateWallColor() {
         if (gameState === 'WIN') {
             canvas.style.borderColor = VICTORY_COLOR;
@@ -354,100 +397,57 @@
 
         const wallColor = gameMode === 'CHASE' ? WALL_COLOR_CHASE : WALL_COLOR_SCATTER;
         const lineColor = gameMode === 'CHASE' ? WALL_LINE_CHASE : WALL_LINE_SCATTER;
-
-        // Update canvas border for visual feedback
         canvas.style.borderColor = wallColor;
         canvas.style.boxShadow = `0 0 20px ${wallColor}`;
         
         return { wallColor, lineColor };
     }
-
-    function switchGameMode() {
-        const modeDisplayElement = document.getElementById('mode-display');
-
-        modeTimer++;
-        let duration = gameMode === 'CHASE' ? CHASE_DURATION : SCATTER_DURATION;
-
-        if (modeTimer >= duration) {
-            gameMode = gameMode === 'CHASE' ? 'SCATTER' : 'CHASE';
-            modeTimer = 0;
-            
-            const reverseMap = { 'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT' };
-            GHOSTS.forEach(ghost => {
-                if (ghost.moving) {
-                    ghost.direction = reverseMap[ghost.direction];
-                    setNextTarget(ghost, ghost.direction); 
-                } 
-            });
-
-            if (modeDisplayElement) {
-                modeDisplayElement.textContent = gameMode;
-                if (gameMode === 'CHASE') {
-                    modeDisplayElement.classList.replace('bg-green-800', 'bg-red-800');
-                } else {
-                    modeDisplayElement.classList.replace('bg-red-800', 'bg-green-800');
-                }
-            }
-            updateWallColor();
-        }
-    }
-
+    
+    // --- MOVEMENT LOGIC ---
     function moveEntity(entity, speed) {
         if (!entity.moving) return false;
-
         const dx = entity.targetX - entity.x;
         const dy = entity.targetY - entity.y;
-        const dist = Math.sqrt(dx * dx + dy * dy); 
-
+        const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 0) {
             const step = Math.min(speed, dist);
-            
             entity.x += (dx / dist) * step;
             entity.y += (dy / dist) * step;
-
             if (isAtTarget(entity)) {
                 entity.x = entity.targetX;
                 entity.y = entity.targetY;
-                
                 entity.col = Math.floor(entity.x / TILE_SIZE);
                 entity.row = Math.floor(entity.y / TILE_SIZE);
-                
-                return true; 
+                return true;
             }
         }
-        return false; 
+        return false;
     }
     
-    // Separate movement logic for celebration (non-grid based)
     function moveEntityToCenter(entity, speed = 2) {
         const dx = entity.targetX - entity.x;
         const dy = entity.targetY - entity.y;
-        const dist = Math.sqrt(dx * dx + dy * dy); 
-
-        if (dist > 5) { // Threshold for starting the wiggle
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 5) {
             const step = Math.min(speed, dist);
             entity.x += (dx / dist) * step;
             entity.y += (dy / dist) * step;
             return false;
         } else {
             entity.x = entity.targetX;
-            entity.y = entity.targetY;
+            entity.y = entity.targetY; 
             return true;
         }
     }
 
-
     function updatePacmanPosition() {
-        
         if (!pacman.moving && pacman.requestedDirection !== pacman.direction) {
              setNextTarget(pacman, pacman.requestedDirection);
         }
         
         const arrived = moveEntity(pacman, SPEED);
-
         if (arrived) {
             eatDots();
-
             if (pacman.requestedDirection !== pacman.direction) {
                 if (setNextTarget(pacman, pacman.requestedDirection)) {
                     // Turn successful
@@ -475,9 +475,7 @@
     
     function moveGhosts() {
         GHOSTS.forEach(ghost => {
-            
             const arrived = moveEntity(ghost, GHOST_SPEED);
-
             if (arrived || !ghost.moving) {
                 const desiredDirection = getGhostDirection(ghost);
                 setNextTarget(ghost, desiredDirection);
@@ -485,9 +483,26 @@
         });
     }
 
+    // --- GAMEPLAY LOGIC ---
+    function switchGameMode() {
+        modeTimer++;
+        let duration = gameMode === 'CHASE' ? CHASE_DURATION : SCATTER_DURATION;
+        if (modeTimer >= duration) {
+            gameMode = gameMode === 'CHASE' ? 'SCATTER' : 'CHASE';
+            modeTimer = 0;
+            const reverseMap = { 'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT' };
+            GHOSTS.forEach(ghost => {
+                if (ghost.moving) {
+                    ghost.direction = reverseMap[ghost.direction];
+                    setNextTarget(ghost, ghost.direction); 
+                } 
+            });
+            updateWallColor();
+        }
+    }
+    
     function checkGhostCollision() {
-        const distanceThreshold = pacman.radius * 2 * 0.8; 
-
+        const distanceThreshold = pacman.radius * 2 * 0.8;
         GHOSTS.forEach(ghost => {
             const dx = pacman.x - ghost.x;
             const dy = pacman.y - ghost.y;
@@ -500,106 +515,80 @@
     }
     
     function respawnEntities() {
-        // This function handles the reset after the death pause
         lives--;
         
-        const livesElement = document.getElementById('lives');
-        if(livesElement) livesElement.textContent = lives;
-        
         if (lives > 0) {
-            // --- NON-FINAL DEATH: RESET POSITIONS & COLORS ---
-            
-            // Re-initialize ghosts (which randomizes their colors)
-            initializeGhosts(); 
-
-            // Reset Pac-Man position and target
+            initializeGhosts();
             pacman.col = 5; pacman.row = 11;
-            pacman.direction = 'UP';
-            pacman.requestedDirection = 'UP';
-            pacman.moving = true; // Pac-Man starts moving again
+            pacman.direction = 'UP'; pacman.requestedDirection = 'UP';
+            pacman.moving = true; 
             const { x, y } = getCenterPixel(pacman.col, pacman.row);
             pacman.x = x; pacman.y = y;
+            pacman.targetX = x; pacman.targetY = y;
             setNextTarget(pacman, pacman.direction);
             
-            // Resume the game loop
-            gameState = 'RUNNING';
+            gameState = 'RUNNING'; 
             pauseMessage.classList.add('hidden');
-
         } else {
-            // --- FINAL DEATH: DO NOT RESET POSITIONS ---
-            // Entities remain frozen at their death location.
             endGame(false);
         }
     }
 
     function handlePacmanDeath() {
-        // Stop Pac-Man and the ghosts immediately
         pacman.moving = false;
         GHOSTS.forEach(g => g.moving = false); 
         
-        if (lives > 1) { // Non-final death
+        if (lives > 1) { 
             gameState = 'PAUSED_DEATH';
             pauseMessage.classList.remove('hidden');
-            
-            // STAGE 1: Display "CAUGHT!" for 1.5s
             pauseMessage.textContent = "CAUGHT!";
             
             setTimeout(() => {
-                // STAGE 2: Display "GET READY!" for another 1.5s
-                pauseMessage.textContent = "GET READY!";
-                
+                pauseMessage.textContent = "READY!";
                 setTimeout(() => {
-                    // STAGE 3: Resume Game (calls respawnEntities)
-                    respawnEntities(); 
-                }, 1500); 
-
+                    pauseMessage.textContent = "ESCAPE!"; 
+                    setTimeout(() => {
+                        respawnEntities(); 
+                    }, 1000); 
+                }, 1000); 
             }, 1500); 
-
         } else {
-            // Final death: skip the pause and go straight to game over.
-            // respawnEntities will decrement lives to 0 and call endGame(false).
             respawnEntities(); 
         }
     }
-
-
+    
     function resetGame() {
-        // Setup new AI behaviors for the game
         setupNewGameBehaviors();
-        
         MAP = JSON.parse(JSON.stringify(INITIAL_MAP));
         score = 0;
         lives = 3;
-        gameState = 'RUNNING'; 
         
-        // Ensure UI is fully reset
-        document.getElementById('game-info').innerHTML = `
-            <h1 class="text-3xl font-extrabold text-yellow-400">PAC-MAZE RUNNER</h1>
-            <p class="text-xl mt-2">Score: <span id="score">${score}</span> | Lives: <span id="lives">${lives}</span> | Mode: <span id="mode-display" class="mode-display bg-green-800">SCATTER</span></p>
-        `;
-        
-        // Reset Pac-Man
         pacman.col = 5; pacman.row = 11;
         pacman.direction = 'UP';
         pacman.requestedDirection = 'UP';
         pacman.moving = true;
-        pacman.isCelebrating = false; // Reset celebration state
+        pacman.isCelebrating = false;
         const { x, y } = getCenterPixel(pacman.col, pacman.row);
         pacman.x = x; pacman.y = y;
         setNextTarget(pacman, pacman.direction); 
 
-        // Reset and randomize Ghost colors
         initializeGhosts();
-
-        // Reset Mode
         gameMode = 'SCATTER';
         modeTimer = 0;
-        document.getElementById('mode-display').textContent = gameMode;
-        document.getElementById('mode-display').classList.replace('bg-red-800', 'bg-green-800');
-
+        
         updateWallColor(); 
+        hideGameMessage();
+    }
 
-        // Restart loop if it was stopped
+    /**
+     * Public function called by the "Play Again" button.
+     * FIX 2: Ensures a clean reset and restarts the game loop.
+     */
+    window.resetGameAndStart = function() {
+        resetGame();
+        gameState = 'RUNNING'; // Crucial to resume game immediately
+        
+        // Ensure game loop is running if it was stopped on LOSE
         if (!gameLoopInterval) {
              gameLoopInterval = setInterval(gameLoop, 1000 / 60);
         }
@@ -607,13 +596,9 @@
 
     function eatDots() {
         const { row, col } = pacman;
-        
-        if (MAP[row][col] === 0) { // Dot (0)
-            MAP[row][col] = 2; // Mark as empty (2)
+        if (MAP[row][col] === 0) {
+            MAP[row][col] = 2;
             score += 10;
-            const scoreElement = document.getElementById('score');
-            if(scoreElement) scoreElement.textContent = score;
-            
             checkWinCondition();
         }
     }
@@ -622,55 +607,38 @@
         let remainingDots = 0;
         for (let r = 0; r < MAP_HEIGHT; r++) {
             for (let c = 0; c < MAP_WIDTH; c++) {
-                if (MAP[r][c] === 0) {
-                    remainingDots++;
-                }
+                if (MAP[r][c] === 0) { remainingDots++; }
             }
         }
-        
-        if (remainingDots === 0) {
-            endGame(true);
-        }
+        if (remainingDots === 0) { endGame(true); }
     }
 
     function endGame(won) {
-        GHOSTS.forEach(g => g.moving = false); // Freeze ghosts
+        GHOSTS.forEach(g => g.moving = false);
         
-        if (!won) {
-            clearInterval(gameLoopInterval);
-            gameLoopInterval = null;
-        }
-        
+        if (!won) { clearInterval(gameLoopInterval); gameLoopInterval = null; }
         gameState = won ? 'WIN' : 'LOSE';
         updateWallColor();
-
-        // Custom Messages
-        const titleText = won ? "I'm free!" : "one of us! one of us!";
-        const subtitleText = won ? "VICTORY!" : "GAME OVER";
+        
+        // Use smaller font sizes for responsive titles
+        const titleText = won ? "I'M FREE!" : "ONE OF US! ONE OF US!";
         const titleColor = won ? 'text-green-500' : 'text-red-500';
 
         if (won) {
-            // Start celebration sequence
             pacman.moving = false;
             pacman.isCelebrating = true;
             pacman.victoryEmoji = getRandomEmoji();
             pacman.targetX = canvas.width / 2;
             pacman.targetY = canvas.height / 2;
-            // Keep game loop running to animate the movement/dance
         }
-
-        const infoDiv = document.getElementById('game-info');
-        infoDiv.innerHTML = `
-            <h1 class="text-4xl font-extrabold ${titleColor}">${titleText}</h1>
-            <p class="text-2xl mt-2">${subtitleText} Final Score: ${score}</p>
-            <button onclick="window.resetGame()" class="mt-4 p-3 bg-green-500 rounded-lg shadow-md hover:bg-green-600">Play Again</button>`;
+        
+        // FIX 2: Update the button to call the new resetGameAndStart function
+        showEndGameScreen(titleText, score, titleColor);
     }
     
     // --- DRAWING FUNCTIONS ---
-
     function drawMap() {
         const { wallColor, lineColor } = updateWallColor();
-
         for (let r = 0; r < MAP_HEIGHT; r++) {
             for (let c = 0; c < MAP_WIDTH; c++) {
                 const x = c * TILE_SIZE;
@@ -683,7 +651,6 @@
                         ctx.strokeStyle = lineColor;
                         ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
                     } else {
-                        // Clear the maze background on win for a clean stage
                         ctx.fillStyle = '#000';
                         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
                     }
@@ -703,53 +670,48 @@
         let drawY = pacman.y;
         
         if (gameState === 'WIN') {
-            // Wiggle dance only starts once he's close to the center
             const isCentered = isAtTarget(pacman);
             const wiggleOffset = isCentered ? Math.sin(frameCounter * 0.4) * 5 : 0; 
             drawX += wiggleOffset;
-
-            // Draw celebratory Pac-Man (Solid circle with emoji)
             ctx.fillStyle = 'yellow';
             ctx.beginPath();
             ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
             ctx.fill();
-
-            // Draw the random celebratory emoji
-            ctx.font = `${radius}px Arial`; 
+            ctx.font = `${radius}px Arial`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(pacman.victoryEmoji, drawX, drawY + 2); // +2 for vertical centering adjustment
-            
+            ctx.fillText(pacman.victoryEmoji, drawX, drawY + 2);
             return;
         }
 
         if (gameState === 'LOSE' || gameState === 'PAUSED_DEATH') {
-            // Draw Pac-Man as a yellow ghost when defeated
-            ctx.fillStyle = 'yellow'; 
+            // Draw Defeated Pac-Man (Yellow Ghost)
+            ctx.fillStyle = 'yellow';
             ctx.beginPath();
             ctx.arc(drawX, drawY, radius, Math.PI, 0, false);
             ctx.rect(drawX - radius, drawY, radius * 2, radius * 1.5);
             ctx.fill();
-            
-            // Add defeated ghost eyes
+
+            // Add white eyes
             ctx.fillStyle = 'white';
             ctx.beginPath();
             ctx.arc(drawX - radius * 0.3, drawY - radius * 0.1, radius * 0.2, 0, Math.PI * 2);
             ctx.arc(drawX + radius * 0.3, drawY - radius * 0.1, radius * 0.2, 0, Math.PI * 2);
             ctx.fill();
             
-            ctx.fillStyle = 'gray'; 
+            // FIX 3: Pupil color is now blue to match other ghosts
+            ctx.fillStyle = 'blue'; 
             ctx.beginPath();
             ctx.arc(drawX - radius * 0.3, drawY - radius * 0.1, radius * 0.1, 0, Math.PI * 2);
             ctx.arc(drawX + radius * 0.3, drawY - radius * 0.1, radius * 0.1, 0, Math.PI * 2);
             ctx.fill();
+
             return;
         }
 
-        // --- Standard Pac-Man Drawing ---
+        // Standard Pac-Man Drawing
         ctx.fillStyle = 'yellow';
         ctx.beginPath();
-        
         let baseAngle = 0;
         switch (pacman.direction) {
             case 'UP': baseAngle = -0.5; break; 
@@ -757,7 +719,6 @@
             case 'LEFT': baseAngle = 1; break; 
             case 'RIGHT': baseAngle = 0; break;
         }
-
         ctx.arc(
             pacman.x, pacman.y, pacman.radius,
             (pacman.angle.start + baseAngle) * Math.PI,
@@ -768,37 +729,37 @@
     }
 
     function drawGhosts() {
-        if (gameState === 'WIN') {
-            // Ghosts disappear on win
-            return;
-        }
-        
+        if (gameState === 'WIN') { return; }
         const radius = pacman.radius;
-        
-        // Calculate shake offset for the LOSE state celebration
         const isCelebrating = gameState === 'LOSE';
-        const shake = isCelebrating ? Math.sin(frameCounter * 0.2) * 2 : 0; // Wiggle by +/- 2 pixels
+        const shake = isCelebrating ? Math.sin(frameCounter * 0.2) * 2 : 0;
 
         GHOSTS.forEach(ghost => {
-            
-            // Apply shake offset to X coordinate only during celebration
             const centerX = ghost.x + shake;
             const centerY = ghost.y;
-            
-            // Use the dynamic color
             ctx.fillStyle = ghost.color;
             ctx.beginPath();
+            // Ghost body (Arc and Rectangle)
             ctx.arc(centerX, centerY, radius, Math.PI, 0, false);
             ctx.rect(centerX - radius, centerY, radius * 2, radius * 1.5);
+            
+            // Draw skirt/feet (scalloped bottom)
+            const footSize = radius / 3;
+            ctx.lineTo(centerX + radius, centerY + radius * 1.5);
+            ctx.lineTo(centerX + radius - footSize, centerY + radius * 1.5 - footSize);
+            ctx.lineTo(centerX + radius - footSize * 2, centerY + radius * 1.5);
+            ctx.lineTo(centerX + radius - footSize * 3, centerY + radius * 1.5 - footSize);
+            ctx.lineTo(centerX + radius - footSize * 4, centerY + radius * 1.5);
+            ctx.lineTo(centerX - radius, centerY + radius * 1.5);
+
             ctx.fill();
             
-            // Draw eyes
+            // Draw eyes (Standard Blue Eyes)
             ctx.fillStyle = 'white';
             ctx.beginPath();
             ctx.arc(centerX - radius * 0.3, centerY - radius * 0.1, radius * 0.2, 0, Math.PI * 2);
             ctx.arc(centerX + radius * 0.3, centerY - radius * 0.1, radius * 0.2, 0, Math.PI * 2);
             ctx.fill();
-            
             ctx.fillStyle = 'blue'; 
             ctx.beginPath();
             ctx.arc(centerX - radius * 0.3, centerY - radius * 0.1, radius * 0.1, 0, Math.PI * 2);
@@ -807,15 +768,43 @@
         });
     }
 
+    // --- STATUS MESSAGES ---
+    function showGameMessage(text, emoji = null) {
+        let content = '';
+        if (emoji) { content += `<span class="huge-emoji">${emoji}</span>`; }
+        content += `<span>${text}</span>`;
+        messageEl.innerHTML = content;
+        messageEl.style.display = 'block';
+    }
+
+    function showEndGameScreen(title, finalScore, titleColor) {
+        // Use smaller font sizes for responsive titles
+        messageEl.innerHTML = `
+            <h1 class="text-3xl font-extrabold ${titleColor}">${title}</h1>
+            <p class="text-xl mt-1 mb-4 text-white">Final Score: ${finalScore}</p>
+            <button onclick="window.resetGameAndStart()" class="restart-button">Play Again</button>`;
+        messageEl.style.display = 'block';
+    }
+
+    function hideGameMessage() {
+        messageEl.style.display = 'none';
+    }
+
     // --- INPUT HANDLERS ---
     function setRequestedDirection(direction) {
-        if (gameState === 'RUNNING') {
+        if (gameState === 'PAUSED_START' && isFirstGame) {
+             // Only show the start message once
+             isFirstGame = false;
+        }
+
+        if (gameState === 'PAUSED_START' || gameState === 'RUNNING') {
+            hideGameMessage();
+            gameState = 'RUNNING';
             pacman.requestedDirection = direction;
         }
     }
-
+    
     document.addEventListener('keydown', (e) => {
-        if (gameState !== 'RUNNING') return;
         switch (e.key) {
             case 'ArrowUp': case 'w': setRequestedDirection('UP'); break;
             case 'ArrowDown': case 's': setRequestedDirection('DOWN'); break;
@@ -824,7 +813,6 @@
         }
         e.preventDefault(); 
     });
-
     document.querySelectorAll('.control-button').forEach(button => {
         const direction = button.getAttribute('data-dir');
         button.addEventListener('click', () => setRequestedDirection(direction));
@@ -834,44 +822,81 @@
         });
     });
 
-    // --- GLOBAL FUNCTIONS EXPOSED (Required for onclick in HTML) ---
-    window.resetGame = resetGame; 
+    // --- SWIPE INPUT HANDLERS ---
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const swipeThreshold = 50; 
+
+    canvas.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        e.preventDefault(); 
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].clientX;
+        const touchEndY = e.changedTouches[0].clientY;
+
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+
+        if (Math.abs(deltaX) > swipeThreshold || Math.abs(deltaY) > swipeThreshold) {
+            if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                if (deltaX > 0) { setRequestedDirection('RIGHT'); } 
+                else { setRequestedDirection('LEFT'); }
+            } else {
+                if (deltaY > 0) { setRequestedDirection('DOWN'); } 
+                else { setRequestedDirection('UP'); }
+            }
+        } else {
+             if (gameState === 'PAUSED_START' && lives > 0) {
+                 // Treat a tap as an initial 'UP' move to start the game
+                 setRequestedDirection('UP');
+             }
+        }
+    }, { passive: false });
+
 
     // --- MAIN GAME LOOP ---
-
     function gameLoop() {
         frameCounter++;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+
         drawMap();
-        
-        // Only run game logic if state is RUNNING
+
         if (gameState === 'RUNNING') {
-            switchGameMode(); 
+            switchGameMode();
             updatePacmanPosition();
             moveGhosts();
             checkGhostCollision();
         } else if (gameState === 'WIN') {
-            // Animate Pac-Man moving to the center for the dance
             moveEntityToCenter(pacman);
         }
 
-        // Draw order: Ghosts first, then Pac-Man (ensures Pac-Man is always on top)
         drawGhosts();
         drawPacman();
     }
+    
+    // --- INITIALIZATION ---
+    function initialize() {
+        resizeCanvas(); 
+        resetGame(); // Start in clean state
+        
+        // Only show the start message on the very first load
+        if (isFirstGame) {
+            gameState = 'PAUSED_START';
+            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️'); 
+        }
 
-    // Start the game loop
-    window.onload = function () {
-        // Need to run the loop regardless of win/loss to update the win screen
-        // and handle death pauses.
-        resetGame();
+        window.addEventListener('resize', resizeCanvas); 
+
         if (!gameLoopInterval) {
-            gameLoopInterval = setInterval(gameLoop, 1000 / 60); 
+            gameLoopInterval = setInterval(gameLoop, 1000 / 60);
         }
     }
 
-</script>
+    window.onload = initialize;
 
+</script>
 </body>
 </html>
