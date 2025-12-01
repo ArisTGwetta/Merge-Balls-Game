@@ -79,14 +79,14 @@ canvas {
     border: 3px solid #63b3ed;
     border-radius: 12px;
     color: #fff;
-    /* FIX 1: Reduced font size for start/end game message box */
+    /* Font size for start/end game message box */
     font-size: 1.25rem; 
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
     display: none; 
 }
 
 .huge-emoji {
-    /* FIX 1: Reduced emoji size */
+    /* Emoji size */
     font-size: 2.5rem; 
     line-height: 1;
     display: block;
@@ -182,7 +182,7 @@ canvas {
     // --- GAME STATE AND ENTITIES ---
     let score = 0; 
     let lives = 3; 
-    let gameLoopInterval;
+    let gameLoopInterval = null; // Initialize as null for clean checking
     let gameMode = 'SCATTER'; 
     let gameState = 'PAUSED_START';
     let modeTimer = 0;
@@ -579,19 +579,25 @@ canvas {
         updateWallColor(); 
         hideGameMessage();
     }
+    
+    /**
+     * FIX 1: Dedicated function to ensure the game loop is running and clean.
+     */
+    function startGameLoop() {
+        if (gameLoopInterval) {
+            clearInterval(gameLoopInterval);
+        }
+        gameLoopInterval = setInterval(gameLoop, 1000 / 60);
+    }
 
     /**
      * Public function called by the "Play Again" button.
-     * FIX 2: Ensures a clean reset and restarts the game loop.
+     * FIX 2: Ensures a clean reset and GUARANTEES the game loop is running.
      */
     window.resetGameAndStart = function() {
         resetGame();
-        gameState = 'RUNNING'; // Crucial to resume game immediately
-        
-        // Ensure game loop is running if it was stopped on LOSE
-        if (!gameLoopInterval) {
-             gameLoopInterval = setInterval(gameLoop, 1000 / 60);
-        }
+        gameState = 'RUNNING'; 
+        startGameLoop();
     }
 
     function eatDots() {
@@ -616,11 +622,13 @@ canvas {
     function endGame(won) {
         GHOSTS.forEach(g => g.moving = false);
         
-        if (!won) { clearInterval(gameLoopInterval); gameLoopInterval = null; }
+        if (!won) { 
+            clearInterval(gameLoopInterval); 
+            gameLoopInterval = null; 
+        } // Only stop on LOSE, WIN continues to draw the celebration in the loop
         gameState = won ? 'WIN' : 'LOSE';
         updateWallColor();
         
-        // Use smaller font sizes for responsive titles
         const titleText = won ? "I'M FREE!" : "ONE OF US! ONE OF US!";
         const titleColor = won ? 'text-green-500' : 'text-red-500';
 
@@ -632,7 +640,6 @@ canvas {
             pacman.targetY = canvas.height / 2;
         }
         
-        // FIX 2: Update the button to call the new resetGameAndStart function
         showEndGameScreen(titleText, score, titleColor);
     }
     
@@ -699,7 +706,7 @@ canvas {
             ctx.arc(drawX + radius * 0.3, drawY - radius * 0.1, radius * 0.2, 0, Math.PI * 2);
             ctx.fill();
             
-            // FIX 3: Pupil color is now blue to match other ghosts
+            // Pupil color is blue to match other ghosts
             ctx.fillStyle = 'blue'; 
             ctx.beginPath();
             ctx.arc(drawX - radius * 0.3, drawY - radius * 0.1, radius * 0.1, 0, Math.PI * 2);
@@ -778,7 +785,6 @@ canvas {
     }
 
     function showEndGameScreen(title, finalScore, titleColor) {
-        // Use smaller font sizes for responsive titles
         messageEl.innerHTML = `
             <h1 class="text-3xl font-extrabold ${titleColor}">${title}</h1>
             <p class="text-xl mt-1 mb-4 text-white">Final Score: ${finalScore}</p>
@@ -793,7 +799,6 @@ canvas {
     // --- INPUT HANDLERS ---
     function setRequestedDirection(direction) {
         if (gameState === 'PAUSED_START' && isFirstGame) {
-             // Only show the start message once
              isFirstGame = false;
         }
 
@@ -821,82 +826,3 @@ canvas {
             e.preventDefault(); 
         });
     });
-
-    // --- SWIPE INPUT HANDLERS ---
-    let touchStartX = 0;
-    let touchStartY = 0;
-    const swipeThreshold = 50; 
-
-    canvas.addEventListener('touchstart', (e) => {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        e.preventDefault(); 
-    }, { passive: false });
-
-    canvas.addEventListener('touchend', (e) => {
-        const touchEndX = e.changedTouches[0].clientX;
-        const touchEndY = e.changedTouches[0].clientY;
-
-        const deltaX = touchEndX - touchStartX;
-        const deltaY = touchEndY - touchStartY;
-
-        if (Math.abs(deltaX) > swipeThreshold || Math.abs(deltaY) > swipeThreshold) {
-            if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                if (deltaX > 0) { setRequestedDirection('RIGHT'); } 
-                else { setRequestedDirection('LEFT'); }
-            } else {
-                if (deltaY > 0) { setRequestedDirection('DOWN'); } 
-                else { setRequestedDirection('UP'); }
-            }
-        } else {
-             if (gameState === 'PAUSED_START' && lives > 0) {
-                 // Treat a tap as an initial 'UP' move to start the game
-                 setRequestedDirection('UP');
-             }
-        }
-    }, { passive: false });
-
-
-    // --- MAIN GAME LOOP ---
-    function gameLoop() {
-        frameCounter++;
-        ctx.clearRect(0, 0, canvas.width, canvas.height); 
-
-        drawMap();
-
-        if (gameState === 'RUNNING') {
-            switchGameMode();
-            updatePacmanPosition();
-            moveGhosts();
-            checkGhostCollision();
-        } else if (gameState === 'WIN') {
-            moveEntityToCenter(pacman);
-        }
-
-        drawGhosts();
-        drawPacman();
-    }
-    
-    // --- INITIALIZATION ---
-    function initialize() {
-        resizeCanvas(); 
-        resetGame(); // Start in clean state
-        
-        // Only show the start message on the very first load
-        if (isFirstGame) {
-            gameState = 'PAUSED_START';
-            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️'); 
-        }
-
-        window.addEventListener('resize', resizeCanvas); 
-
-        if (!gameLoopInterval) {
-            gameLoopInterval = setInterval(gameLoop, 1000 / 60);
-        }
-    }
-
-    window.onload = initialize;
-
-</script>
-</body>
-</html>
