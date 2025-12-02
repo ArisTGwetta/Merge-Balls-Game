@@ -903,4 +903,16 @@ canvas {
         
         if (isFirstGame) {
             gameState = 'PAUSED_START';
-            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️
+            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️'); 
+        }
+
+        window.addEventListener('resize', resizeCanvas); 
+        
+        startGameLoop(); // Start the loop for the initial 'PAUSED_START' screen
+    }
+
+    window.onload = initialize;
+
+</script>
+</body>
+</html>
