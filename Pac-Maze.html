@@ -112,6 +112,8 @@ canvas {
 .restart-button {
     @apply mt-4 p-3 bg-green-500 rounded-lg shadow-md hover:bg-green-600 transition duration-150;
     font-size: 1.25rem;
+    /* Ensure the button z-index is above other elements */
+    z-index: 20; 
 }
 </style>
 </head>
@@ -402,7 +404,7 @@ canvas {
                 // Snap to target and update grid position using stored coordinates
                 entity.x = entity.targetX; 
                 entity.y = entity.targetY;
-                entity.col = entity.nextCol; // Snap to guaranteed integer grid position
+                entity.col = entity.nextCol; 
                 entity.row = entity.nextRow;
                 return true; // Arrived
             } else {
@@ -427,7 +429,7 @@ canvas {
         } else {
             entity.x = entity.targetX;
             entity.y = entity.targetY; 
-            return true;
+            return true; // Arrived at center
         }
     }
 
@@ -609,10 +611,6 @@ canvas {
     }
 
     function endGame(won) {
-        // FIX: Ensure the loop stops on both Win and Loss
-        clearInterval(gameLoopInterval); 
-        gameLoopInterval = null; 
-
         GHOSTS.forEach(g => g.moving = false);
         
         gameState = won ? 'WIN' : 'LOSE';
@@ -621,15 +619,22 @@ canvas {
         const titleText = won ? "I'M FREE!" : "ONE OF US! ONE OF US!";
         const titleColor = won ? 'text-green-500' : 'text-red-500';
 
-        if (won) {
+        if (!won) {
+            // CRITICAL FIX: Stop the loop immediately on loss, as there is no animation needed.
+            clearInterval(gameLoopInterval); 
+            gameLoopInterval = null; 
+        } else {
+            // Setup win animation, loop stays running and will be stopped in gameLoop when centered
             pacman.moving = false;
             pacman.isCelebrating = true;
             pacman.victoryEmoji = getRandomEmoji();
             pacman.targetX = canvas.width / 2;
             pacman.targetY = canvas.height / 2;
             
-            // Re-start the loop briefly to handle the centering animation on the win screen
-            startGameLoop(); 
+            // Ensure the loop is running to handle the win animation.
+            if (!gameLoopInterval) {
+                startGameLoop(); 
+            }
         }
         
         showEndGameScreen(titleText, score, titleColor);
@@ -827,7 +832,7 @@ canvas {
         });
     });
 
-    // --- SWIPE INPUT HANDLERS (FIXED: Attached to document.body for full coverage) ---
+    // --- SWIPE INPUT HANDLERS (Full-screen coverage) ---
     let touchStartX = 0;
     let touchStartY = 0;
     const swipeThreshold = 50; 
@@ -835,9 +840,6 @@ canvas {
     swipeTarget.addEventListener('touchstart', (e) => {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
-        // Don't prevent default here to allow vertical scrolling on non-game areas if touch-action:none is not set, 
-        // but since touch-action:none is on body, we'll keep the preventDefault in touchend for game logic.
-        // e.preventDefault(); 
     }, { passive: false });
 
     swipeTarget.addEventListener('touchend', (e) => {
@@ -848,71 +850,6 @@ canvas {
         const deltaY = touchEndY - touchStartY;
 
         if (Math.abs(deltaX) > swipeThreshold || Math.abs(deltaY) > swipeThreshold) {
-            // It's a swipe
             if (Math.abs(deltaX) > Math.abs(deltaY)) {
                 if (deltaX > 0) { setRequestedDirection('RIGHT'); } 
-                else { setRequestedDirection('LEFT'); }
-            } else {
-                if (deltaY > 0) { setRequestedDirection('DOWN'); } 
-                else { setRequestedDirection('UP'); }
-            }
-        } else {
-             // It's a tap (or small drag)
-             if (gameState === 'PAUSED_START' && lives > 0) {
-                 // Treat a tap as an initial 'UP' move to start the game
-                 setRequestedDirection('UP');
-             }
-        }
-        e.preventDefault(); // Prevent default on touchend if we processed an input.
-    }, { passive: false });
-
-
-    // --- MAIN GAME LOOP ---
-    function gameLoop() {
-        frameCounter++;
-        ctx.clearRect(0, 0, canvas.width, canvas.height); 
-
-        drawMap();
-
-        if (gameState === 'RUNNING') {
-            switchGameMode();
-            updatePacmanPosition();
-            moveGhosts();
-            checkGhostCollision();
-        } else if (gameState === 'WIN') {
-            // Only move to center while the 'WIN' state is fresh
-            if (!moveEntityToCenter(pacman)) {
-                // If Pacman is still moving, keep the loop going
-            } else if (gameLoopInterval) {
-                // Stop the loop once Pacman is centered and dancing
-                clearInterval(gameLoopInterval);
-                gameLoopInterval = null;
-            }
-        } else if (gameState === 'LOSE') {
-            // Keep drawing the 'LOSE' frame but don't run movement logic
-        }
-
-        drawGhosts();
-        drawPacman();
-    }
-    
-    // --- INITIALIZATION ---
-    function initialize() {
-        resizeCanvas(); 
-        resetGame(); 
-        
-        if (isFirstGame) {
-            gameState = 'PAUSED_START';
-            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️'); 
-        }
-
-        window.addEventListener('resize', resizeCanvas); 
-        
-        startGameLoop(); // Start the loop for the initial 'PAUSED_START' screen
-    }
-
-    window.onload = initialize;
-
-</script>
-</body>
-</html>
+                else {
