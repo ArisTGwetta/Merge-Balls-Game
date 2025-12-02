@@ -9,11 +9,13 @@
 /* CSS for Responsiveness and Styling */
 body {
     font-family: 'Inter', sans-serif;
+    /* Use Tailwind classes for styling */
     @apply bg-gray-900 text-white min-h-screen flex items-center justify-center p-4;
     margin: 0;
     padding: 1rem;
     box-sizing: border-box;
     user-select: none;
+    /* CRITICAL: Allows full-screen swipe without triggering mobile zoom/scroll */
     touch-action: none; 
 }
 
@@ -33,7 +35,6 @@ body {
     max-width: 500px;
     aspect-ratio: 1 / 1; 
     margin-bottom: 1rem;
-    /* Border and shadow styling for the maze container */
     border: 4px solid #f6e05e; 
     border-radius: 8px;
     overflow: hidden;
@@ -45,7 +46,6 @@ canvas {
     width: 100%; 
     height: 100%;
     background-color: #000; 
-    /* Initial wall color, updated by JS */
     border: 4px solid #3b82f6; 
     box-shadow: 0 0 20px #3b82f6; 
     border-radius: 1rem; 
@@ -81,14 +81,12 @@ canvas {
     border: 3px solid #63b3ed;
     border-radius: 12px;
     color: #fff;
-    /* Font size for start/end game message box */
     font-size: 1.25rem; 
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
     display: none; 
 }
 
 .huge-emoji {
-    /* Emoji size */
     font-size: 2.5rem; 
     line-height: 1;
     display: block;
@@ -149,8 +147,8 @@ canvas {
     const ctx = canvas.getContext('2d');
     const messageEl = document.getElementById('message');
     const pauseMessage = document.getElementById('pause-message');
-    // FIXED: Get game container for robust swipe detection
-    const gameContainer = document.getElementById('game-container'); 
+    // Using document.body for full-screen swipe coverage
+    const swipeTarget = document.body; 
 
     // --- GAME CONFIGURATION ---
     let TILE_SIZE; 
@@ -205,7 +203,7 @@ canvas {
         col: 5, row: 11,
         x: 0, y: 0, 
         targetX: 0, targetY: 0,
-        nextCol: 5, nextRow: 11, // Tracks the grid destination (CRITICAL for stability)
+        nextCol: 5, nextRow: 11,
         radius: 0,
         direction: 'UP', 
         requestedDirection: 'UP',
@@ -238,8 +236,6 @@ canvas {
             const { x, y } = getCenterPixel(newCol, newRow);
             entity.targetX = x;
             entity.targetY = y;
-            
-            // CRITICAL: Store the intended grid coordinates to update 'col' and 'row' on arrival
             entity.nextCol = newCol; 
             entity.nextRow = newRow;
 
@@ -369,7 +365,6 @@ canvas {
         pacman.radius = TILE_SIZE / 2 - 2;
 
         const resetEntityPosition = (entity) => {
-             // Ensure entities are perfectly aligned to the new center pixels on resize
              const { x, y } = getCenterPixel(entity.col, entity.row);
              entity.x = x;
              entity.y = y;
@@ -479,7 +474,7 @@ canvas {
         });
     }
 
-    // --- GAMEPLAY LOGIC (Unchanged) ---
+    // --- GAMEPLAY LOGIC ---
     function switchGameMode() {
         modeTimer++;
         let duration = gameMode === 'CHASE' ? CHASE_DURATION : SCATTER_DURATION;
@@ -587,6 +582,7 @@ canvas {
         gameLoopInterval = setInterval(gameLoop, 1000 / 60);
     }
 
+    // Exported function for the Restart button's onclick handler
     window.resetGameAndStart = function() {
         resetGame();
         gameState = 'RUNNING'; 
@@ -613,12 +609,12 @@ canvas {
     }
 
     function endGame(won) {
+        // FIX: Ensure the loop stops on both Win and Loss
+        clearInterval(gameLoopInterval); 
+        gameLoopInterval = null; 
+
         GHOSTS.forEach(g => g.moving = false);
         
-        if (!won) { 
-            clearInterval(gameLoopInterval); 
-            gameLoopInterval = null; 
-        } 
         gameState = won ? 'WIN' : 'LOSE';
         updateWallColor();
         
@@ -631,6 +627,9 @@ canvas {
             pacman.victoryEmoji = getRandomEmoji();
             pacman.targetX = canvas.width / 2;
             pacman.targetY = canvas.height / 2;
+            
+            // Re-start the loop briefly to handle the centering animation on the win screen
+            startGameLoop(); 
         }
         
         showEndGameScreen(titleText, score, titleColor);
@@ -786,7 +785,7 @@ canvas {
     function showEndGameScreen(title, finalScore, titleColor) {
         messageEl.innerHTML = `
             <h1 class="text-3xl font-extrabold ${titleColor}">${title}</h1>
-            <p class="text-xl mt-1 mb-4 text-white">Final Score: ${finalScore}</p>
+            <p class="text-xl mt-1 mb-4 text-white">Score: ${finalScore}</p>
             <button onclick="window.resetGameAndStart()" class="restart-button">Play Again</button>`;
         messageEl.style.display = 'block';
     }
@@ -828,18 +827,20 @@ canvas {
         });
     });
 
-    // --- SWIPE INPUT HANDLERS (FIXED: Attached to container for larger target) ---
+    // --- SWIPE INPUT HANDLERS (FIXED: Attached to document.body for full coverage) ---
     let touchStartX = 0;
     let touchStartY = 0;
     const swipeThreshold = 50; 
 
-    gameContainer.addEventListener('touchstart', (e) => {
+    swipeTarget.addEventListener('touchstart', (e) => {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
-        e.preventDefault(); 
+        // Don't prevent default here to allow vertical scrolling on non-game areas if touch-action:none is not set, 
+        // but since touch-action:none is on body, we'll keep the preventDefault in touchend for game logic.
+        // e.preventDefault(); 
     }, { passive: false });
 
-    gameContainer.addEventListener('touchend', (e) => {
+    swipeTarget.addEventListener('touchend', (e) => {
         const touchEndX = e.changedTouches[0].clientX;
         const touchEndY = e.changedTouches[0].clientY;
 
@@ -862,10 +863,11 @@ canvas {
                  setRequestedDirection('UP');
              }
         }
+        e.preventDefault(); // Prevent default on touchend if we processed an input.
     }, { passive: false });
 
 
-    // --- MAIN GAME LOOP (Unchanged) ---
+    // --- MAIN GAME LOOP ---
     function gameLoop() {
         frameCounter++;
         ctx.clearRect(0, 0, canvas.width, canvas.height); 
@@ -878,30 +880,27 @@ canvas {
             moveGhosts();
             checkGhostCollision();
         } else if (gameState === 'WIN') {
-            moveEntityToCenter(pacman);
+            // Only move to center while the 'WIN' state is fresh
+            if (!moveEntityToCenter(pacman)) {
+                // If Pacman is still moving, keep the loop going
+            } else if (gameLoopInterval) {
+                // Stop the loop once Pacman is centered and dancing
+                clearInterval(gameLoopInterval);
+                gameLoopInterval = null;
+            }
+        } else if (gameState === 'LOSE') {
+            // Keep drawing the 'LOSE' frame but don't run movement logic
         }
 
         drawGhosts();
         drawPacman();
     }
     
-    // --- INITIALIZATION (Unchanged) ---
+    // --- INITIALIZATION ---
     function initialize() {
         resizeCanvas(); 
         resetGame(); 
         
         if (isFirstGame) {
             gameState = 'PAUSED_START';
-            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️'); 
-        }
-
-        window.addEventListener('resize', resizeCanvas); 
-        
-        startGameLoop();
-    }
-
-    window.onload = initialize;
-
-</script>
-</body>
-</html>
+            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️
