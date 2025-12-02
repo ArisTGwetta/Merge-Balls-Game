@@ -620,11 +620,11 @@ canvas {
         const titleColor = won ? 'text-green-500' : 'text-red-500';
 
         if (!won) {
-            // CRITICAL FIX: Stop the loop immediately on loss, as there is no animation needed.
+            // Stop the loop immediately on loss
             clearInterval(gameLoopInterval); 
             gameLoopInterval = null; 
         } else {
-            // Setup win animation, loop stays running and will be stopped in gameLoop when centered
+            // Setup win animation
             pacman.moving = false;
             pacman.isCelebrating = true;
             pacman.victoryEmoji = getRandomEmoji();
@@ -852,4 +852,68 @@ canvas {
         if (Math.abs(deltaX) > swipeThreshold || Math.abs(deltaY) > swipeThreshold) {
             if (Math.abs(deltaX) > Math.abs(deltaY)) {
                 if (deltaX > 0) { setRequestedDirection('RIGHT'); } 
-                else {
+                else { setRequestedDirection('LEFT'); }
+            } else {
+                if (deltaY > 0) { setRequestedDirection('DOWN'); } 
+                else { setRequestedDirection('UP'); }
+            }
+        } else {
+             // Handle tap/small drag to start game
+             if (gameState === 'PAUSED_START' && lives > 0) {
+                 setRequestedDirection('UP');
+             }
+        }
+        e.preventDefault(); 
+    }, { passive: false });
+
+
+    // --- MAIN GAME LOOP ---
+    function gameLoop() {
+        frameCounter++;
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
+
+        drawMap();
+
+        if (gameState === 'RUNNING') {
+            switchGameMode();
+            updatePacmanPosition();
+            moveGhosts();
+            checkGhostCollision();
+        } else if (gameState === 'WIN') {
+            // Run win animation
+            if (moveEntityToCenter(pacman)) { 
+                // Stop the loop once Pacman is centered and dancing
+                if (gameLoopInterval) {
+                    clearInterval(gameLoopInterval);
+                    gameLoopInterval = null;
+                }
+            }
+        } 
+        
+        drawGhosts();
+        drawPacman();
+    }
+    
+    // --- INITIALIZATION ---
+    function initialize() {
+        resizeCanvas(); 
+        resetGame(); 
+        
+        if (isFirstGame) {
+            gameState = 'PAUSED_START';
+            showGameMessage("Press an arrow key, button, or swipe to start!", '🕹️'); 
+        }
+
+        window.addEventListener('resize', resizeCanvas); 
+        
+        startGameLoop(); 
+        
+        // **CRITICAL FIX: Explicitly call gameLoop once to render the first frame immediately.**
+        gameLoop(); 
+    }
+
+    window.onload = initialize;
+
+</script>
+</body>
+</html>
