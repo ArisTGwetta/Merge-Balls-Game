@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
+  <meta name="screen-orientation" content="portrait" />
+  <meta name="x5-orientation" content="portrait" />
+  <title>Pong Painter</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* 
+      ---------------------------------------------------------
+      Dedication
+      For Francisco — my partner in every playful world we build.
+      Signed: copilot
+      Date: Dec 28, 2025
+      ---------------------------------------------------------
+    */
+
+    html, body {
+      overscroll-behavior: none;
+      touch-action: none;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #000;
+                        // #0d1117;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #game-container {
+      @apply flex flex-col justify-start items-center p-4 rounded-xl shadow-2xl;
+      background-color: #000;
+                       //#1a202c;
+      //border: 8px solid #3b82f6;
+      max-width: 95vw;
+      width: 95%;
+      max-height: 65vh;
+      height: 100%;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    #pongCanvas {
+      background-color: #000;
+      display: block;
+      flex-grow: 0;
+      margin: 0 auto;
+      border-radius: 4px;
+    }
+
+    .message-box {
+      @apply absolute inset-0 bg-gray-900 bg-opacity-95 flex flex-col justify-center items-center text-white p-4 rounded-md;
+      z-index: 100;
+      height: 100%;
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 4px;
+    }
+
+    #game-title {
+      @apply text-2xl font-extrabold mb-2;
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="game-container">
+    <h1 id="game-title">PONG PAINTER</h1>
+
+    <!-- Buttons top-left -->
+    <div class="w-full flex justify-start mb-2">
+      <div class="flex gap-2">
+        <button id="toggle-assistant" class="px-3 py-1 bg-blue-500 text-white rounded text-xs sm:text-sm">
+          Assistant: ON
+        </button>
+        <button id="reset-white" class="px-3 py-1 bg-gray-200 text-black rounded text-xs sm:text-sm">
+          Reset White
+        </button>
+        <button id="reset-rainbow" class="px-3 py-1 bg-pink-500 text-white rounded text-xs sm:text-sm">
+          Reset Rainbow
+        </button>
+      </div>
+    </div>
+
+    <canvas id="pongCanvas"></canvas>
+
+    <div id="initial-message-box" class="message-box">
+      <h2 class="text-3xl font-extrabold mb-3 text-yellow-400 text-center">Welcome to Pong Painter!</h2>
+      <p class="text-base mb-4 text-center px-2">
+        Move the green paddle (right) to start painting the wall of bricks.
+      </p>
+      <p class="text-sm text-gray-400">
+        Turn the Assistant ON or OFF for a playful nudge.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('pongCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('game-container');
+    const initialMessageBox = document.getElementById('initial-message-box');
+
+    const toggleAssistantBtn = document.getElementById('toggle-assistant');
+    const resetWhiteBtn = document.getElementById('reset-white');
+    const resetRainbowBtn = document.getElementById('reset-rainbow');
+
+    const GAME_WIDTH = 400;
+    const GAME_HEIGHT = 600;
+    let scaleFactor = 1;
+
+    const PADDLE_WIDTH = 10;
+    const PADDLE_HEIGHT = 70;
+
+    let playerY = (GAME_HEIGHT / 2) - (PADDLE_HEIGHT / 2);
+    let assistantY = (GAME_HEIGHT / 2) - (PADDLE_HEIGHT / 2);
+    const PADDLE_SPEED = 6;
+
+    const BALL_SIZE = 10;
+    let ballX = GAME_WIDTH / 2;
+    let ballY = GAME_HEIGHT / 2;
+    let ballSpeedX = 5;
+    let ballSpeedY = 5;
+
+    const brickRows = 12;
+    const brickCols = 3;
+    const brickWidth = 30;
+    const brickHeight = 35;
+    const brickPadding = 4;
+    const brickOffsetLeft = 50;
+    const brickOffsetTop = 20;
+
+    const colors = ["red", "blue", "yellow", "white"];
+    let bricks = [];
+
+    let gameRunning = false;
+    let isGameStarted = false;
+
+    let assistantEnabled = true;
+    let assistantPulse = 0;
+
+    for (let r = 0; r < brickRows; r++) {
+      bricks[r] = [];
+      for (let c = 0; c < brickCols; c++) {
+        bricks[r][c] = {
+          x: 0,
+          y: 0,
+          colorIndex: Math.floor(Math.random() * colors.length)
+        };
+      }
+    }
+
+    function drawRect(x, y, w, h, color) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+    }
+
+    function drawCircle(x, y, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawEverything() {
+      drawRect(0, 0, GAME_WIDTH, GAME_HEIGHT, '#000');
+
+      for (let r = 0; r < brickRows; r++) {
+        for (let c = 0; c < brickCols; c++) {
+          const b = bricks[r][c];
+          const x = brickOffsetLeft + c * (brickWidth + brickPadding);
+          const y = brickOffsetTop + r * (brickHeight + brickPadding);
+          b.x = x;
+          b.y = y;
+          drawRect(x, y, brickWidth, brickHeight, colors[b.colorIndex]);
+        }
+      }
+
+      drawRect(GAME_WIDTH - PADDLE_WIDTH - 20, playerY, PADDLE_WIDTH, PADDLE_HEIGHT, '#10b981');
+
+      if (assistantEnabled) {
+        const color = assistantPulse > 0 ? '#93c5fd' : '#3b82f6';
+        drawRect(20, assistantY, PADDLE_WIDTH, PADDLE_HEIGHT, color);
+      }
+
+      drawCircle(ballX, ballY, BALL_SIZE / 2, '#ef4444');
+    }
+
+    function moveBall() {
+      ballX += ballSpeedX;
+      ballY += ballSpeedY;
+
+      if (ballY < BALL_SIZE / 2 || ballY > GAME_HEIGHT - BALL_SIZE / 2) {
+        ballSpeedY = -ballSpeedY;
+      }
+
+      if (ballX < BALL_SIZE / 2) {
+        ballX = BALL_SIZE / 2;
+        ballSpeedX = Math.abs(ballSpeedX);
+      } else if (ballX > GAME_WIDTH - BALL_SIZE / 2) {
+        ballX = GAME_WIDTH - BALL_SIZE / 2;
+        ballSpeedX = -Math.abs(ballSpeedX);
+      }
+    }
+
+    function resetBall() {
+      ballX = GAME_WIDTH / 2;
+      ballY = GAME_HEIGHT / 2;
+      ballSpeedX = (Math.random() > 0.5 ? 1 : -1) * 5;
+      ballSpeedY = (Math.random() > 0.5 ? 1 : -1) * 5;
+    }
+
+    function assistantMovement() {
+      if (!assistantEnabled) return;
+
+      const center = assistantY + PADDLE_HEIGHT / 2;
+      if (center < ballY - 20) assistantY += PADDLE_SPEED * 0.7;
+      else if (center > ballY + 20) assistantY -= PADDLE_SPEED * 0.7;
+
+      assistantY = Math.max(0, Math.min(GAME_HEIGHT - PADDLE_HEIGHT, assistantY));
+    }
+
+    function checkCollision() {
+      for (let r = 0; r < brickRows; r++) {
+        for (let c = 0; c < brickCols; c++) {
+          const b = bricks[r][c];
+          if (
+            ballX > b.x &&
+            ballX < b.x + brickWidth &&
+            ballY > b.y &&
+            ballY < b.y + brickHeight
+          ) {
+            ballSpeedX = -ballSpeedX;
+            b.colorIndex = (b.colorIndex + 1) % colors.length;
+          }
+        }
+      }
+
+      const playerX = GAME_WIDTH - PADDLE_WIDTH - 20;
+      if (
+        ballX > playerX - BALL_SIZE / 2 &&
+        ballX < playerX + PADDLE_WIDTH + BALL_SIZE / 2 &&
+        ballY > playerY &&
+        ballY < playerY + PADDLE_HEIGHT
+      ) {
+        ballSpeedX = -Math.abs(ballSpeedX);
+      }
+
+      if (assistantEnabled) {
+        const ax = 20;
+        if (
+          ballX < ax + PADDLE_WIDTH + BALL_SIZE / 2 &&
+          ballX > ax - BALL_SIZE / 2 &&
+          ballY > assistantY &&
+          ballY < assistantY + PADDLE_HEIGHT
+        ) {
+          ballSpeedX = Math.abs(ballSpeedX);
+          assistantPulse = 10;
+        }
+      }
+    }
+
+    function gameLoop() {
+      if (!gameRunning) {
+        drawEverything();
+        return;
+      }
+
+      moveBall();
+      assistantMovement();
+      checkCollision();
+
+      if (assistantPulse > 0) assistantPulse--;
+
+      drawEverything();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+      isGameStarted = true;
+      initialMessageBox.classList.add('hidden');
+      gameRunning = true;
+      resetBall();
+      gameLoop();
+    }
+
+    toggleAssistantBtn.addEventListener('click', () => {
+      assistantEnabled = !assistantEnabled;
+      toggleAssistantBtn.textContent = `Assistant: ${assistantEnabled ? 'ON' : 'OFF'}`;
+    });
+
+    resetWhiteBtn.addEventListener('click', () => {
+      bricks.forEach(row => row.forEach(b => b.colorIndex = colors.indexOf("white")));
+    });
+
+    resetRainbowBtn.addEventListener('click', () => {
+      bricks.forEach(row => row.forEach(b => b.colorIndex = Math.floor(Math.random() * colors.length)));
+    });
+
+    function handleResize() {
+      canvas.width = GAME_WIDTH;
+      canvas.height = GAME_HEIGHT;
+
+      const availableWidth = container.clientWidth - 32;
+      const availableHeight = container.clientHeight - 32;
+
+      const scaleX = availableWidth / GAME_WIDTH;
+      const scaleY = availableHeight / GAME_HEIGHT;
+      scaleFactor = Math.min(scaleX, scaleY);
+
+      canvas.style.width = `${GAME_WIDTH * scaleFactor}px`;
+      canvas.style.height = `${GAME_HEIGHT * scaleFactor}px`;
+
+      drawEverything();
+    }
+
+    function handlePaddleMove(e) {
+      e.preventDefault();
+
+      if (!isGameStarted) startGame();
+      if (!gameRunning) return;
+
+      let clientY = e.touches?.[0]?.clientY ?? e.clientY;
+      const rect = canvas.getBoundingClientRect();
+      const y = (clientY - rect.top) / scaleFactor;
+
+      playerY = Math.max(0, Math.min(GAME_HEIGHT - PADDLE_HEIGHT, y - PADDLE_HEIGHT / 2));
+    }
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('load', () => {
+      setTimeout(handleResize, 100);
+    });
+
+    canvas.addEventListener('mousemove', handlePaddleMove);
+    canvas.addEventListener('touchmove', handlePaddleMove);
+    canvas.addEventListener('touchstart', handlePaddleMove);
+  </script>
+</body>
+
+</html>
