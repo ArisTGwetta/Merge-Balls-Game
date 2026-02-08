@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>The legend of Ikarus the little one</title>
+<title>chtrs1</title>
 
 <style>
     * {
@@ -2162,7 +2162,6 @@ swipeTarget.addEventListener('touchstart', (e) => {
 swipeTarget.addEventListener('touchmove', (e) => {
     e.preventDefault();
     if (window.gameState === 'GAME_OVER') return;
-
     if (!activeTouch) return;
 
     const t = e.touches[0];
@@ -2948,6 +2947,8 @@ if (cameraMode === CAMERA_MODE.FOLLOW) {
 --------------------------------------------------------- */
 function update() {
 
+	console.log("Lives:", lives, "Phase:", deathPhase);
+
     /* ------------------------------
        ROOM MODE — FADE STATE MACHINE
        ------------------------------ */
@@ -3020,12 +3021,53 @@ function update() {
 --------------------------------------------------------- */
 function render() {
 
-// Wing moment override
-if (performance.now() < window.wingMomentUntil) {
-    drawWingPickupMoment();
+    // --- GAME OVER: custom ghost chorus ---
+if (window.gameState === 'GAME_OVER') {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const center = getCenterPixel(5, 11);
+    const spacing = TILE_SIZE * 1.2;
+
+    if (pacGhostJoinProgress < 1) {
+        pacGhostJoinProgress += 0.02;
+    }
+
+    const joinOffsetY = TILE_SIZE * (1 - pacGhostJoinProgress);
+
+    for (let i = 0; i < 5; i++) {
+        let ghost;
+        const baseY = center.y;
+
+        if (i === 2) {
+            ghost = {
+                x: center.x + (i - 2) * spacing,
+                y: baseY + joinOffsetY,
+                color: '#facc15',
+                danceOffset: Math.sin(frameCounter * 0.2 + i) * TILE_SIZE * 0.3
+            };
+        } else {
+            const color = GHOST_COLORS[(i < 2 ? i : i - 1) % GHOST_COLORS.length];
+            ghost = {
+                x: center.x + (i - 2) * spacing,
+                y: baseY,
+                color,
+                danceOffset: Math.sin(frameCounter * 0.2 + i) * TILE_SIZE * 0.3
+            };
+        }
+
+        drawGhost(ghost);
+    }
+
+    drawMessage("One of us, One of us!");
     return;
 }
 
+
+    // Wing moment override
+    if (performance.now() < window.wingMomentUntil) {
+        drawWingPickupMoment();
+        return;
+    }
 
     // --- VICTORY OVERRIDE ---
     if (window.victoryMode) {
@@ -3034,45 +3076,40 @@ if (performance.now() < window.wingMomentUntil) {
         } else {
             drawVictorySequence();
         }
-        return; // <-- legal here
+        return;
     }
 
-    // Debug text (drawn above everything)
+    // Normal play
+    ctx.save();
+
+    // Debug text
     ctx.fillText(
         `Fade: ${roomFade.toFixed(2)} | State: ${roomTransitionState}`,
         10,
         20
     );
 
-    ctx.save();
-
     // 1. WORLD
     drawVisibleWorld();
 
-    // 2. TEMPLE FRAME (optional — only if you added it)
+    // 2. TEMPLE FRAME
     if (typeof drawTempleFrame === "function") {
         drawTempleFrame();
     }
 
-    // 3. SKY ICON (marquee)
+    // 3. SKY ICON
     if (skyIcon.active) {
         drawSkyIconSprite(ctx);
     }
 
-    // 4. ACTORS (only when not transitioning)
-	if (roomTransitionState === 'NONE' && roomFade === 0) {
-	
-	    // ⭐ Draw Mini first (behind Pacman)
-    	drawMini();
-	
-    	// Ghosts
-    	GHOSTS.forEach(drawGhost);
-	
-	    // Pacman / Ikarus
-	    if (deathPhase !== 'RETURNING') {
-	        drawPacman();
-	    }
-	}
+    // 4. ACTORS
+    if (roomTransitionState === 'NONE' && roomFade === 0) {
+        drawMini();
+        GHOSTS.forEach(drawGhost);
+        if (deathPhase !== 'RETURNING') {
+            drawPacman();
+        }
+    }
 
     // 5. DEATH EFFECTS
     drawDeathEffects();
@@ -3084,17 +3121,19 @@ if (performance.now() < window.wingMomentUntil) {
         transitionFlash -= 0.05;
     }
 
-    // 7. END SCREENS
+    // 7. VICTORY END SCREENS (legacy)
     if (window.gameState === 'VICTORY') {
         drawEndScreens();
     }
+
+    // RETURNING MESSAGE
     if (deathPhase === 'RETURNING') {
         drawMessage(getDeathMessage());
     }
 
     ctx.restore();
 
-    // 8. BLACKOUT CURTAIN (ROOM MODE ONLY)
+    // 8. BLACKOUT CURTAIN
     if (cameraMode === CAMERA_MODE.ROOM && roomFade > 0) {
         ctx.save();
         ctx.fillStyle = `rgba(0,0,0,${roomFade})`;
@@ -3102,8 +3141,6 @@ if (performance.now() < window.wingMomentUntil) {
         ctx.restore();
     }
 }
-
-
 
 
 /* ---------------------------------------------------------
@@ -3224,7 +3261,6 @@ const soul = {
 };
 
 // --- PAC-MAN DEATH HANDLER ---
-
 function handlePacmanDeath() {
     pacmanFade = 1.0;
     if (deathPhase !== 'ALIVE') return;
@@ -3233,14 +3269,12 @@ function handlePacmanDeath() {
     deathPhase = 'DYING';
     deathTimer = 0;
 
-    window.gameState = 'GAME_OVER';   // ⭐ Add this line
-
     pacman.moving = false;
 
+    // Soul starts at Pac-Man's world pixel position
     soul.x = pacman.x;
     soul.y = pacman.y;
 }
-
 
 /* =========================================================
    End of Block 9.1
@@ -3275,16 +3309,28 @@ function updateDeathSequence() {
         return;
     }
 
-    // --- CELEBRATION (FINAL DEATH) ---
-    if (deathPhase === 'CELEBRATION') {
 
+// --- CELEBRATION (FINAL DEATH) ---
+if (deathPhase === 'CELEBRATION') {
+console.log("entered celebration");
+
+    // First frame of celebration
+    if (deathTimer === 0) {
         initializeGhosts();   // prepare chorus
         pacman.isGhost = false;
-
-        deathPhase = 'ALIVE';
-        window.gameState = 'GAME_OVER';
-        return;
     }
+
+    deathTimer++;
+console.log("death timer and game over ");
+    // Let the celebration sit on screen for 120 frames (~2 seconds)
+    if (deathTimer >= 120) {
+        window.gameState = 'GAME_OVER';   // ⭐ THIS WAS MISSING
+        deathPhase = 'ALIVE';
+    }
+console.log("end of celebration");
+    return;
+}
+
 
     // --- RETURNING (SOUL FLOATS BACK TO SPAWN) ---
     if (deathPhase === 'RETURNING') {
@@ -3436,7 +3482,16 @@ function drawEndScreens() {
     }
 
     if (window.gameState === 'GAME_OVER') {
-        drawOverlay("One of us, One of us!");
+
+    drawVisibleWorld();
+
+    // Optional dim
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    GHOSTS.forEach(drawGhost);
+
+    drawOverlay("One of us, One of us!");
     }
 }
 
@@ -3459,21 +3514,22 @@ if (window.gameState === 'GAME_OVER') {
 
 function drawOverlay(text) {
     ctx.save();
-    // ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    // ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = '#fff';
-    ctx.font = `${TILE_SIZE * 1.2}px sans-serif`;
+    ctx.font = `${TILE_SIZE * 0.7}px serif`;
     ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.7)';
+    ctx.shadowBlur = 8;
 
     ctx.fillText(
         text,
         canvas.width / 2,
-        canvas.height / 2
+        canvas.height * 0.65
     );
 
     ctx.restore();
 }
+
 
 /* =========================================================
    End of Block 10
@@ -4181,7 +4237,6 @@ window.addEventListener("load", () => {
 
 
 </script>
-
 
 
 
