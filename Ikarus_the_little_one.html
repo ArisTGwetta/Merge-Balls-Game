@@ -2161,6 +2161,8 @@ swipeTarget.addEventListener('touchstart', (e) => {
 
 swipeTarget.addEventListener('touchmove', (e) => {
     e.preventDefault();
+    if (window.gameState === 'GAME_OVER') return;
+
     if (!activeTouch) return;
 
     const t = e.touches[0];
@@ -3222,6 +3224,7 @@ const soul = {
 };
 
 // --- PAC-MAN DEATH HANDLER ---
+
 function handlePacmanDeath() {
     pacmanFade = 1.0;
     if (deathPhase !== 'ALIVE') return;
@@ -3230,12 +3233,14 @@ function handlePacmanDeath() {
     deathPhase = 'DYING';
     deathTimer = 0;
 
+    window.gameState = 'GAME_OVER';   // ⭐ Add this line
+
     pacman.moving = false;
 
-    // Soul starts at Pac-Man's world pixel position
     soul.x = pacman.x;
     soul.y = pacman.y;
 }
+
 
 /* =========================================================
    End of Block 9.1
