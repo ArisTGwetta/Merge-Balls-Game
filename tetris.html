@@ -2,46 +2,81 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tetris Hybrid - Level Up Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tetris Hybrid Mobile</title>
     <style>
-        body { background: #1a1a1a; color: #fff; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .game-container { position: relative; border: 4px solid #333; padding: 10px; background: #000; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        canvas { display: block; background-color: #050505; }
-        .ui { margin-bottom: 15px; text-align: center; width: 240px; display: flex; justify-content: space-between; font-weight: bold; }
-        .controls { margin-top: 20px; text-align: center; }
-        button { padding: 8px 15px; cursor: pointer; background: #333; color: white; border: 1px solid #555; margin: 0 5px; transition: 0.2s; border-radius: 4px; }
-        button:hover { background: #444; }
-        button.active { background: #007bff; border-color: #00d4ff; box-shadow: 0 0 10px rgba(0,123,255,0.5); }
-        .label { color: #888; font-size: 12px; text-transform: uppercase; }
-        .val { font-size: 20px; display: block; }
+        :root { --bg: #121212; --accent: #007bff; }
+        body { background: var(--bg); color: #fff; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; touch-action: none; overflow: hidden; height: 100vh; }
+        
+        .ui-top { display: flex; justify-content: space-around; width: 100%; max-width: 300px; padding: 10px; font-weight: bold; }
+        .stat-box { text-align: center; }
+        .label { font-size: 10px; color: #888; text-transform: uppercase; }
+        
+        #game-wrapper { position: relative; border: 2px solid #333; }
+        canvas { display: block; background: #000; width: 70vw; height: auto; max-width: 300px; }
+
+        .modes { margin: 10px; }
+        button { padding: 8px 12px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
+        button.active { background: var(--accent); border-color: #00d4ff; }
+
+        /* Virtual Controller */
+        .controls-grid { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 10px; 
+            margin-top: 15px; 
+            width: 90%; 
+            max-width: 400px;
+        }
+        .btn { 
+            background: rgba(255,255,255,0.1); 
+            border: 2px solid #444; 
+            border-radius: 12px; 
+            height: 60px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 24px;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        .btn:active { background: var(--accent); }
+        .btn-wide { grid-column: span 3; height: 50px; font-size: 16px; }
     </style>
 </head>
 <body>
 
-    <div class="ui">
-        <div><span class="label">Score</span><span id="score" class="val">0</span></div>
-        <div><span class="label">Level</span><span id="level" class="val">0</span></div>
-        <div><span class="label">Lines</span><span id="lines" class="val">0</span></div>
-    </div>
+<div class="ui-top">
+    <div class="stat-box"><div class="label">Score</div><div id="score">0</div></div>
+    <div class="stat-box"><div class="label">Level</div><div id="level">0</div></div>
+    <div class="stat-box"><div class="label">Lines</div><div id="lines">0</div></div>
+</div>
 
-    <div class="game-container">
-        <canvas id="tetris" width="240" height="400"></canvas>
-    </div>
+<div class="modes">
+    <button id="modeClassic" class="active">Classic</button>
+    <button id="modeRising">Rising</button>
+</div>
 
-    <div class="controls">
-        <button id="modeClassic" class="active">Classic Mode</button>
-        <button id="modeRising">Rising Mode</button>
-    </div>
+<div id="game-wrapper">
+    <canvas id="tetris" width="240" height="400"></canvas>
+</div>
+
+<div class="controls-grid">
+    <div class="btn" id="ctrl-rot">↻</div>
+    <div class="btn" id="ctrl-up">↑</div>
+    <div class="btn" id="ctrl-none"></div>
+    <div class="btn" id="ctrl-left">←</div>
+    <div class="btn" id="ctrl-down">↓</div>
+    <div class="btn" id="ctrl-right">→</div>
+    <div class="btn btn-wide" id="ctrl-drop">HARD DROP</div>
+</div>
 
 <script>
 const canvas = document.getElementById('tetris');
 const context = canvas.getContext('2d');
-const scoreElement = document.getElementById('score');
-const levelElement = document.getElementById('level');
-const linesElement = document.getElementById('lines');
-
 context.scale(20, 20);
 
+const colors = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
 const pieces = {
     'I': [[0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]],
     'L': [[0, 2, 0], [0, 2, 0], [0, 2, 2]],
@@ -52,25 +87,12 @@ const pieces = {
     'T': [[0, 7, 0], [7, 7, 7], [0, 0, 0]],
 };
 
-const colors = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
-
 let isRisingMode = false;
-let dropCounter = 0;
-let lastTime = 0;
-
-const player = {
-    pos: {x: 0, y: 0},
-    matrix: null,
-    score: 0,
-    level: 0,
-    lines: 0,
-    dropInterval: 1000,
-};
+let arena = createMatrix(12, 20);
+const player = { pos: {x: 0, y: 0}, matrix: null, score: 0, level: 0, lines: 0, dropInterval: 1000 };
 
 function createMatrix(w, h) {
-    const matrix = [];
-    while (h--) matrix.push(new Array(w).fill(0));
-    return matrix;
+    return Array.from({length: h}, () => new Array(w).fill(0));
 }
 
 function createPiece(type) {
@@ -81,15 +103,25 @@ function createPiece(type) {
     return pieces[type];
 }
 
-function drawMatrix(matrix, offset) {
+// GHOST PIECE LOGIC
+function getGhostPos() {
+    let ghost = { pos: {x: player.pos.x, y: player.pos.y}, matrix: player.matrix };
+    const step = isRisingMode ? -1 : 1;
+    while (!collide(arena, ghost)) {
+        ghost.pos.y += step;
+    }
+    ghost.pos.y -= step;
+    return ghost.pos;
+}
+
+function drawMatrix(matrix, offset, isGhost = false) {
     matrix.forEach((row, y) => {
         row.forEach((value, x) => {
             if (value !== 0) {
-                context.fillStyle = colors[value];
+                context.fillStyle = isGhost ? 'rgba(255,255,255,0.2)' : colors[value];
                 context.fillRect(x + offset.x, y + offset.y, 1, 1);
-                // Add a small border to blocks for "Classic" look
+                context.strokeStyle = '#000';
                 context.lineWidth = 0.05;
-                context.strokeStyle = 'rgba(0,0,0,0.5)';
                 context.strokeRect(x + offset.x, y + offset.y, 1, 1);
             }
         });
@@ -97,51 +129,18 @@ function drawMatrix(matrix, offset) {
 }
 
 function draw() {
-    context.fillStyle = '#050505';
+    context.fillStyle = '#000';
     context.fillRect(0, 0, canvas.width, canvas.height);
     drawMatrix(arena, {x: 0, y: 0});
+    drawMatrix(player.matrix, getGhostPos(), true); // Draw Ghost
     drawMatrix(player.matrix, player.pos);
-}
-
-function arenaSweep() {
-    let rowCount = 0;
-    outer: for (let y = arena.length - 1; y >= 0; --y) {
-        for (let x = 0; x < arena[y].length; ++x) {
-            if (arena[y][x] === 0) continue outer;
-        }
-        const row = arena.splice(y, 1)[0].fill(0);
-        arena.unshift(row);
-        ++y;
-        rowCount++;
-    }
-
-    if (rowCount > 0) {
-        player.lines += rowCount;
-        player.score += rowCount * 10 * (player.level + 1);
-        
-        // LEVEL UP LOGIC: Every 10 lines
-        const newLevel = Math.floor(player.lines / 10);
-        if (newLevel > player.level) {
-            player.level = newLevel;
-            // Speed up: lower interval means faster drops
-            // Formula: Starts at 1000ms, decreases by 100ms per level, floor at 100ms
-            player.dropInterval = Math.max(100, 1000 - (player.level * 100));
-        }
-        updateUI();
-    }
-}
-
-function updateUI() {
-    scoreElement.innerText = player.score;
-    levelElement.innerText = player.level;
-    linesElement.innerText = player.lines;
 }
 
 function collide(arena, player) {
     const [m, o] = [player.matrix, player.pos];
     for (let y = 0; y < m.length; ++y) {
         for (let x = 0; x < m[y].length; ++x) {
-            if (m[y][x] !== 0 && (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) return true;
+            if (m[y][x] !== 0 && (arena[y + o.y] === undefined || arena[y + o.y][x + o.x] !== 0)) return true;
         }
     }
     return false;
@@ -155,14 +154,13 @@ function merge(arena, player) {
     });
 }
 
-function rotate(matrix, dir) {
+function rotate(matrix) {
     for (let y = 0; y < matrix.length; ++y) {
         for (let x = 0; x < y; ++x) {
             [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
         }
     }
-    if (dir > 0) matrix.forEach(row => row.reverse());
-    else matrix.reverse();
+    matrix.forEach(row => row.reverse());
 }
 
 function playerDrop() {
@@ -176,9 +174,55 @@ function playerDrop() {
     dropCounter = 0;
 }
 
+function playerHardDrop() {
+    const ghostPos = getGhostPos();
+    player.pos.y = ghostPos.y;
+    merge(arena, player);
+    playerReset();
+    arenaSweep();
+}
+
 function playerMove(dir) {
     player.pos.x += dir;
     if (collide(arena, player)) player.pos.x -= dir;
+}
+
+function playerRotate() {
+    if (isRisingMode) return;
+    const pos = player.pos.x;
+    let offset = 1;
+    rotate(player.matrix);
+    while (collide(arena, player)) {
+        player.pos.x += offset;
+        offset = -(offset + (offset > 0 ? 1 : -1));
+        if (offset > player.matrix[0].length) {
+            rotate(player.matrix); rotate(player.matrix); rotate(player.matrix);
+            player.pos.x = pos;
+            return;
+        }
+    }
+}
+
+function arenaSweep() {
+    let rowCount = 0;
+    outer: for (let y = arena.length - 1; y >= 0; --y) {
+        for (let x = 0; x < arena[y].length; ++x) {
+            if (arena[y][x] === 0) continue outer;
+        }
+        arena.splice(y, 1);
+        arena.unshift(new Array(12).fill(0));
+        ++y;
+        rowCount++;
+    }
+    if (rowCount > 0) {
+        player.lines += rowCount;
+        player.score += rowCount * 10 * (player.level + 1);
+        player.level = Math.floor(player.lines / 10);
+        player.dropInterval = Math.max(100, 1000 - (player.level * 100));
+        document.getElementById('score').innerText = player.score;
+        document.getElementById('level').innerText = player.level;
+        document.getElementById('lines').innerText = player.lines;
+    }
 }
 
 function playerReset() {
@@ -186,66 +230,73 @@ function playerReset() {
     player.matrix = createPiece(p[p.length * Math.random() | 0]);
     player.pos.y = isRisingMode ? arena.length - 1 : 0;
     player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
-    
     if (collide(arena, player)) {
-        // Game Over
         arena.forEach(row => row.fill(0));
-        player.score = 0;
-        player.level = 0;
-        player.lines = 0;
-        player.dropInterval = 1000;
-        updateUI();
+        player.score = 0; player.level = 0; player.lines = 0; player.dropInterval = 1000;
     }
 }
 
-const arena = createMatrix(12, 20);
+// INPUT HANDLING (Touch & Keyboard)
+const handleAction = (action) => {
+    if (action === 'left') playerMove(-1);
+    if (action === 'right') playerMove(1);
+    if (action === 'down') isRisingMode ? playerMove(0) : playerDrop();
+    if (action === 'up') isRisingMode ? playerDrop() : playerRotate();
+    if (action === 'rotate') playerRotate();
+    if (action === 'hard') playerHardDrop();
+};
 
-function update(time = 0) {
-    const deltaTime = time - lastTime;
-    lastTime = time;
-    dropCounter += deltaTime;
-    if (dropCounter > player.dropInterval) {
-        playerDrop();
+// Keyboard
+document.addEventListener('keydown', e => {
+    if (e.keyCode === 37) handleAction('left');
+    else if (e.keyCode === 39) handleAction('right');
+    else if (e.keyCode === 40) handleAction('down');
+    else if (e.keyCode === 38) handleAction('up');
+    else if (e.keyCode === 32) handleAction('hard');
+});
+
+// UI Buttons
+document.getElementById('ctrl-left').onclick = () => handleAction('left');
+document.getElementById('ctrl-right').onclick = () => handleAction('right');
+document.getElementById('ctrl-down').onclick = () => handleAction('down');
+document.getElementById('ctrl-up').onclick = () => handleAction('up');
+document.getElementById('ctrl-rot').onclick = () => handleAction('rotate');
+document.getElementById('ctrl-drop').onclick = () => handleAction('hard');
+
+// Swipe Logic
+let touchStartX = 0; let touchStartY = 0;
+canvas.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+});
+canvas.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) > Math.abs(dy)) {
+        if (Math.abs(dx) > 30) handleAction(dx > 0 ? 'right' : 'left');
+    } else {
+        if (Math.abs(dy) > 30) handleAction(dy > 0 ? 'down' : 'up');
     }
+});
+
+// Mode Toggle
+document.getElementById('modeClassic').onclick = function() {
+    isRisingMode = false; this.classList.add('active'); 
+    document.getElementById('modeRising').classList.remove('active'); playerReset();
+};
+document.getElementById('modeRising').onclick = function() {
+    isRisingMode = true; this.classList.add('active'); 
+    document.getElementById('modeClassic').classList.remove('active'); playerReset();
+};
+
+let dropCounter = 0; let lastTime = 0;
+function update(time = 0) {
+    const deltaTime = time - lastTime; lastTime = time;
+    dropCounter += deltaTime;
+    if (dropCounter > player.dropInterval) playerDrop();
     draw();
     requestAnimationFrame(update);
 }
-
-document.addEventListener('keydown', event => {
-    if (event.keyCode === 37) playerMove(-1);
-    else if (event.keyCode === 39) playerMove(1);
-    else if (event.keyCode === 40) playerDrop();
-    else if (event.keyCode === 38) {
-        if (!isRisingMode) {
-            const pos = player.pos.x;
-            let offset = 1;
-            rotate(player.matrix, 1);
-            while (collide(arena, player)) {
-                player.pos.x += offset;
-                offset = -(offset + (offset > 0 ? 1 : -1));
-                if (offset > player.matrix[0].length) {
-                    rotate(player.matrix, -1);
-                    player.pos.x = pos;
-                    return;
-                }
-            }
-        }
-    }
-});
-
-document.getElementById('modeClassic').addEventListener('click', () => {
-    isRisingMode = false;
-    document.getElementById('modeClassic').classList.add('active');
-    document.getElementById('modeRising').classList.remove('active');
-    playerReset();
-});
-
-document.getElementById('modeRising').addEventListener('click', () => {
-    isRisingMode = true;
-    document.getElementById('modeRising').classList.add('active');
-    document.getElementById('modeClassic').classList.remove('active');
-    playerReset();
-});
 
 playerReset();
 update();
