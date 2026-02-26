@@ -215,11 +215,22 @@ async function applyGravity() {
 }
 
 function resetGame() {
-    blocks = []; score = 0;
-    predictNextRow(); spawnPredictedRow(0); spawnPredictedRow(1); spawnPredictedRow(2);
-    generateNext(); draw();
+    blocks = []; 
+    score = 0;
+    
+    // Clear the prediction and start fresh
+    window.nextRowLayout = null; 
+    
+    // Spawn rows at specific heights
+    spawnPredictedRow(0); // Bottom row
+    spawnPredictedRow(1); // Middle row
+    spawnPredictedRow(2); // Top row of the starting stack
+    
+    generateNext(); 
+    draw();
 }
 resetGame();
 </script>
 </body>
 </html>
+
