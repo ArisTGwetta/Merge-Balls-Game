@@ -11,15 +11,13 @@
         .mode-toggle { display: flex; gap: 5px; background: var(--card); padding: 4px; border-radius: 8px; }
         .mode-btn { border: none; background: none; color: #94a3b8; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 12px; }
         .mode-btn.active { background: var(--accent); color: white; }
-        #game-area { width: 320px; height: 440px; background: var(--card); position: relative; border: 4px solid #334155; border-radius: 12px; overflow: hidden; touch-action: none; }
+        #game-area { width: 320px; height: 446px; background: var(--card); position: relative; border: 4px solid #334155; border-radius: 12px; overflow: hidden; touch-action: none; }
         #grid-container { position: absolute; width: 100%; height: 100%; }
         .block { position: absolute; border-radius: 6px; border: 2px solid rgba(0,0,0,0.2); box-sizing: border-box; transition: top 0.25s cubic-bezier(0.4, 0, 0.2, 1), left 0.1s ease-out; cursor: grab; }
         .block:active { cursor: grabbing; transform: scale(0.98); }
         .block.flash { filter: brightness(3) white; transform: scale(1.1); transition: all 0.1s ease-out; z-index: 10; }
-        
         .ghost-row { position: absolute; bottom: 0; left: 0; height: 6px; width: 100%; display: flex; background: rgba(255, 255, 255, 0.05); z-index: 5; pointer-events: none; }
         .ghost-segment { height: 100%; border-right: 1px solid rgba(255,255,255,0.1); transition: background 0.3s ease; }
-        
         .preview-box { display: flex; flex-direction: column; align-items: center; }
         .preview-label { font-size: 9px; color: #94a3b8; margin-bottom: 2px; text-transform: uppercase; }
         .preview-block { height: 15px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.2); }
@@ -37,18 +35,15 @@
             <button id="btn-falling" class="mode-btn" onclick="setMode('falling')">FALLING</button>
         </div>
     </div>
-
     <div id="game-area">
         <div id="grid-container"></div>
         <div id="ghost-row" class="ghost-row"></div>
     </div>
-
 <script>
 const gridWidth = 8, gridHeight = 11, cellSize = 40;
 let score = 0, blocks = [], gameMode = 'slider', isBusy = false;
 let nextBlockData = null;
 window.nextRowLayout = null; 
-
 const colors = ['#ff4757', '#2ed573', '#1e90ff', '#ffa502', '#70a1ff', '#eccc68'];
 
 function setMode(m) {
@@ -99,13 +94,11 @@ function draw() {
     const container = document.getElementById('grid-container');
     const ghostContainer = document.getElementById('ghost-row');
     const ids = new Set(blocks.map(b => b.id));
-    
     blocks.forEach(b => {
         let el = document.getElementById(b.id);
         if (!el) {
             el = document.createElement('div');
-            el.id = b.id;
-            el.className = 'block';
+            el.id = b.id; el.className = 'block';
             el.onmousedown = (e) => startDrag(e, b);
             el.ontouchstart = (e) => startDrag(e, b);
             container.appendChild(el);
@@ -114,12 +107,9 @@ function draw() {
         el.style.left = (b.x * cellSize) + 'px';
         el.style.top = ((gridHeight - 1 - b.y) * cellSize) + 'px';
         el.style.backgroundColor = b.color;
-        if (b.flash) el.classList.add('flash');
-        else el.classList.remove('flash');
+        if (b.flash) el.classList.add('flash'); else el.classList.remove('flash');
     });
-
     Array.from(container.children).forEach(child => { if (!ids.has(child.id)) child.remove(); });
-
     if (ghostContainer && window.nextRowLayout) {
         ghostContainer.innerHTML = '';
         window.nextRowLayout.forEach(cell => {
@@ -134,7 +124,6 @@ function draw() {
 }
 
 let activeBlock = null, startX = 0, originalX = 0;
-
 function startDrag(e, block) {
     if (isBusy) return;
     activeBlock = block;
@@ -150,44 +139,33 @@ function drag(e) {
     const diff = Math.round((currentX - startX) / cellSize);
     let newX = Math.max(0, Math.min(originalX + diff, gridWidth - activeBlock.width));
     if (!blocks.find(b => b.y === activeBlock.y && b.id !== activeBlock.id && newX < b.x + b.width && newX + activeBlock.width > b.x)) {
-        activeBlock.x = newX;
-        draw();
+        activeBlock.x = newX; draw();
     }
 }
 
 async function endDrag() {
     window.onmousemove = null; window.ontouchmove = null;
     if (!activeBlock) return;
-    activeBlock = null;
-    isBusy = true;
-
+    activeBlock = null; isBusy = true;
     await applyGravity();
-
     if (gameMode === 'slider') {
-        blocks.forEach(b => b.y++);
-        draw();
+        blocks.forEach(b => b.y++); draw();
         await new Promise(r => setTimeout(r, 250));
-        spawnPredictedRow(0);
-        draw();
+        spawnPredictedRow(0); draw();
         await new Promise(r => setTimeout(r, 200));
     } else {
         const x = Math.floor(Math.random() * (gridWidth - nextBlockData.width));
         blocks.push(createBlock(x, gridHeight - 1, nextBlockData.width, nextBlockData.color));
         generateNext();
     }
-
-    await applyGravity();
-    isBusy = false;
-    draw();
-
+    await applyGravity(); isBusy = false; draw();
     if (blocks.some(b => b.y >= gridHeight - 1)) { alert("Game Over!"); resetGame(); }
 }
 
 async function applyGravity() {
     let changed = true;
     while (changed) {
-        changed = false;
-        blocks.sort((a, b) => a.y - b.y);
+        changed = false; blocks.sort((a, b) => a.y - b.y);
         for (let b of blocks) {
             while (b.y > 0) {
                 if (!blocks.find(o => o.id !== b.id && o.y === b.y - 1 && b.x < o.x + o.width && b.x + b.width > o.x)) {
@@ -196,41 +174,29 @@ async function applyGravity() {
             }
         }
         if (changed) { draw(); await new Promise(r => setTimeout(r, 150)); }
-
         for (let y = 0; y < gridHeight; y++) {
             let rowFill = new Array(gridWidth).fill(false);
             let rowBlocks = blocks.filter(b => b.y === y);
             rowBlocks.forEach(b => { for (let i = 0; i < b.width; i++) rowFill[b.x + i] = true; });
-
             if (rowFill.every(f => f)) {
-                rowBlocks.forEach(b => b.flash = true);
-                draw();
+                rowBlocks.forEach(b => b.flash = true); draw();
                 await new Promise(r => setTimeout(r, 250));
                 blocks = blocks.filter(b => b.y !== y);
-                score += 100; changed = true;
-                draw();
+                score += 100; changed = true; draw();
             }
         }
     }
 }
 
 function resetGame() {
-    blocks = []; 
-    score = 0;
-    
-    // Clear the prediction and start fresh
-    window.nextRowLayout = null; 
-    
-    // Spawn rows at specific heights
-    spawnPredictedRow(0); // Bottom row
-    spawnPredictedRow(1); // Middle row
-    spawnPredictedRow(2); // Top row of the starting stack
-    
-    generateNext(); 
-    draw();
+    blocks = []; score = 0; window.nextRowLayout = null; 
+    predictNextRow(); // Get layout for first row
+    spawnPredictedRow(0); // Uses first layout, then calls predict for next
+    spawnPredictedRow(1); 
+    spawnPredictedRow(2); 
+    generateNext(); draw();
 }
 resetGame();
 </script>
 </body>
 </html>
-
