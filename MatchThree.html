@@ -3,205 +3,210 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Match-3: Efficiency Quest</title>
+    <title>Match-3: Smooth Quest</title>
     <style>
-        :root { --bg: #0f0c29; --accent: #24243e; --btn: #00d4ff; --gold: #ffd700; }
-        body { background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; touch-action: none; height: 100vh; overflow: hidden; }
+        :root { --bg: #0f0c29; --accent: #24243e; --btn: #00d4ff; }
+        body { background: var(--bg); color: #fff; font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; touch-action: none; height: 100vh; overflow: hidden; }
         
-        .header { width: 100%; display: flex; flex-direction: column; align-items: center; background: var(--accent); border-bottom: 3px solid #302b63; padding: 10px 0; }
-        .goals { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
-        .goal-item { text-align: center; background: rgba(255,255,255,0.05); padding: 5px 10px; border-radius: 8px; min-width: 55px; border: 1px solid rgba(255,255,255,0.1); }
-        .goal-icon { font-size: 18px; display: block; }
-        .count { font-size: 14px; font-weight: bold; }
+        .header { width: 100%; display: flex; flex-direction: column; align-items: center; background: var(--accent); padding: 10px 0; border-bottom: 3px solid #302b63; }
+        .goals { display: flex; gap: 8px; margin-bottom: 5px; }
+        .goal-item { background: rgba(255,255,255,0.05); padding: 5px 10px; border-radius: 8px; text-align: center; min-width: 50px; border: 1px solid rgba(255,255,255,0.1); }
+        .stats-bar { font-size: 12px; color: var(--btn); font-weight: bold; }
 
-        .stats-bar { display: flex; gap: 20px; font-size: 14px; color: var(--btn); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-
-        #grid { 
-            display: grid; grid-template-columns: repeat(8, 42px); grid-template-rows: repeat(8, 42px); 
-            gap: 4px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 12px; margin-top: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
+        #game-container { position: relative; width: 360px; height: 360px; margin-top: 20px; background: rgba(0,0,0,0.3); border-radius: 12px; overflow: hidden; }
         
         .tile { 
-            width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; 
-            font-size: 24px; border-radius: 6px; cursor: pointer; position: relative;
-            background: rgba(255,255,255,0.05); transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: absolute; width: 40px; height: 40px; 
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 24px; border-radius: 6px; cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+            background: rgba(255,255,255,0.05);
+            user-select: none;
         }
-        .tile.selected { transform: scale(1.15); background: rgba(255,255,255,0.25); box-shadow: 0 0 15px #fff; z-index: 2; }
+        
+        /* Matching Highlight */
+        .tile.matching { transform: scale(1.2); background: #fff; color: #000; z-index: 10; transition: 0.2s; }
+        .tile.selected { box-shadow: 0 0 15px #fff; z-index: 5; background: rgba(255,255,255,0.2); }
+        
         .missile::after { content: '🚀'; position: absolute; font-size: 10px; bottom: 0; right: 0; }
         .bomb::after { content: '💣'; position: absolute; font-size: 10px; bottom: 0; right: 0; }
 
-        .footer { margin-top: 15px; text-align: center; }
-        button#shuffle-btn { background: #333; color: #fff; border: 1px solid #555; padding: 8px 16px; border-radius: 20px; cursor: pointer; margin-top: 10px; }
-        
-        /* Modal for results */
-        #modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--accent); padding: 30px; border-radius: 20px; border: 2px solid var(--btn); text-align: center; z-index: 100; box-shadow: 0 0 50px rgba(0,0,0,1); }
-        #modal h2 { color: var(--gold); margin-top: 0; }
-        .rating { font-size: 24px; margin: 15px 0; color: #fff; }
+        .footer { margin-top: 20px; }
+        #modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--accent); padding: 30px; border-radius: 20px; border: 2px solid var(--btn); text-align: center; z-index: 100; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <div class="goals">
-        <div class="goal-item"><span class="goal-icon">🌸</span><span id="g0" class="count">0</span></div>
-        <div class="goal-item"><span class="goal-icon">😊</span><span id="g1" class="count">0</span></div>
-        <div class="goal-item"><span class="goal-icon">⭐</span><span id="g2" class="count">0</span></div>
-        <div class="goal-item"><span class="goal-icon">💎</span><span id="g3" class="count">0</span></div>
-    </div>
-    <div class="stats-bar">
-        <span>Moves: <span id="move-val">0</span></span>
-        <span>Ratio: <span id="ratio-val">0.00</span></span>
-    </div>
+    <div class="goals" id="goal-container"></div>
+    <div class="stats-bar">Moves: <span id="move-val">0</span> | Ratio: <span id="ratio-val">0.00</span></div>
 </div>
 
-<div id="grid"></div>
+<div id="game-container"></div>
 
 <div class="footer">
-    <button id="shuffle-btn">Shuffle Board 🎲</button>
+    <button onclick="manualShuffle()" style="background:#333; color:white; border:1px solid #555; padding:8px 16px; border-radius:20px;">Shuffle 🎲</button>
 </div>
 
 <div id="modal">
-    <h2>Level Complete!</h2>
-    <div class="rating" id="final-stats"></div>
-    <div id="commentary" style="color: #aaa; margin-bottom: 20px;"></div>
-    <button onclick="nextLevel()" style="background: var(--btn); border:none; padding: 10px 20px; border-radius: 5px; font-weight:bold;">Next Quest</button>
+    <h2 id="res-title">Level Complete!</h2>
+    <div id="final-stats" style="font-size: 20px; margin: 10px;"></div>
+    <button onclick="nextLevel()" style="background: var(--btn); border:none; padding: 10px 20px; border-radius: 5px; font-weight:bold; cursor:pointer;">Next</button>
 </div>
 
 <script>
 const icons = ['🌸', '😊', '⭐', '💎'];
 const size = 8;
-let grid = [];
-let firstTile = null;
-let goals = [0, 0, 0, 0];
-let targets = [10, 6, 12, 5];
+const tileSize = 45; // 40px + 5px gap
+let grid = []; // Now stores objects with unique IDs for DOM persistence
 let moves = 0;
-let isAnimating = false;
+let goals = [0, 0, 0, 0];
+let targets = [10, 8, 12, 5];
+let isBusy = false;
+let selected = null;
 
-function initGame() {
-    grid = Array.from({length: size}, () => 
-        Array.from({length: size}, () => ({ type: Math.floor(Math.random() * icons.length), special: null }))
-    );
-    while(findMatches().length > 0) manualShuffle();
-    render();
+function init() {
+    grid = [];
+    for (let r = 0; r < size; r++) {
+        grid[r] = [];
+        for (let c = 0; c < size; c++) {
+            grid[r][c] = { id: Math.random(), type: Math.floor(Math.random() * icons.length), special: null };
+        }
+    }
+    while(findMatches().length > 0) {
+        grid.forEach(row => row.forEach(cell => cell.type = Math.floor(Math.random()*icons.length)));
+    }
+    renderGoals();
+    drawBoard();
 }
 
-function manualShuffle() {
-    grid.forEach(row => row.forEach(cell => { 
-        cell.type = Math.floor(Math.random() * icons.length); 
-        cell.special = null; 
-    }));
-    if(findMatches().length > 0) manualShuffle();
+function drawBoard() {
+    const container = document.getElementById('game-container');
+    const currentTiles = Array.from(container.children);
+    const existingIds = new Set();
+
+    grid.forEach((row, r) => {
+        row.forEach((cell, c) => {
+            existingIds.add(cell.id);
+            let div = document.getElementById(cell.id);
+            if (!div) {
+                div = document.createElement('div');
+                div.id = cell.id;
+                div.className = 'tile';
+                container.appendChild(div);
+            }
+            div.style.top = `${r * tileSize + 5}px`;
+            div.style.left = `${c * tileSize + 5}px`;
+            div.innerText = icons[cell.type];
+            div.className = `tile ${cell.special || ''} ${selected && selected.r === r && selected.c === c ? 'selected' : ''}`;
+            div.onclick = () => handleTileClick(r, c);
+        });
+    });
+
+    // Remove tiles that aren't in the grid anymore (cleared tiles)
+    currentTiles.forEach(tile => {
+        if (!existingIds.has(parseFloat(tile.id))) container.removeChild(tile);
+    });
+
+    updateStats();
 }
 
-function render() {
-    const container = document.getElementById('grid');
-    container.innerHTML = '';
-    grid.forEach((row, r) => row.forEach((cell, c) => {
-        const div = document.createElement('div');
-        div.className = `tile ${cell.special || ''}`;
-        if (firstTile && firstTile.r === r && firstTile.c === c) div.classList.add('selected');
-        div.innerText = cell.type === -1 ? '' : icons[cell.type];
-        div.onclick = () => handleSelect(r, c);
-        container.appendChild(div);
-    }));
-    updateUI();
-}
-
-function handleSelect(r, c) {
-    if (isAnimating) return;
-    if (!firstTile) {
-        firstTile = {r, c};
-        render();
+async function handleTileClick(r, c) {
+    if (isBusy) return;
+    if (!selected) {
+        selected = {r, c};
+        drawBoard();
     } else {
-        const dist = Math.abs(r - firstTile.r) + Math.abs(c - firstTile.c);
+        const dist = Math.abs(r - selected.r) + Math.abs(c - selected.c);
         if (dist === 1) {
+            isBusy = true;
             moves++;
-            swap(firstTile.r, firstTile.c, r, c);
+            const r1 = selected.r, c1 = selected.c;
+            swap(r1, c1, r, c);
+            drawBoard();
+
+            await new Promise(res => setTimeout(res, 300)); // Wait for slide
+
             if (findMatches().length > 0) {
-                processMatches(r, c);
+                await processAllMatches(r, c);
             } else {
-                setTimeout(() => { swap(firstTile.r, firstTile.c, r, c); render(); }, 250);
+                swap(r1, c1, r, c); // Snap back
+                drawBoard();
             }
         }
-        firstTile = null;
-        render();
+        selected = null;
+        isBusy = false;
+        drawBoard();
     }
 }
 
 function swap(r1, c1, r2, c2) {
-    const temp = {...grid[r1][c1]};
-    grid[r1][c1] = {...grid[r2][c2]};
+    const temp = grid[r1][c1];
+    grid[r1][c1] = grid[r2][c2];
     grid[r2][c2] = temp;
 }
 
 function findMatches() {
-    let matched = [];
+    let matches = [];
     for (let r = 0; r < size; r++) {
         for (let c = 0; c < size - 2; c++) {
-            let type = grid[r][c].type;
-            if (type !== -1 && type === grid[r][c+1].type && type === grid[r][c+2].type) 
-                matched.push({r, c}, {r, c: c+1}, {r, c: c+2});
+            if (grid[r][c].type === grid[r][c+1].type && grid[r][c].type === grid[r][c+2].type)
+                matches.push({r,c},{r,c:c+1},{r,c:c+2});
         }
     }
     for (let c = 0; c < size; c++) {
         for (let r = 0; r < size - 2; r++) {
-            let type = grid[r][c].type;
-            if (type !== -1 && type === grid[r+1][c].type && type === grid[r+2][c].type) 
-                matched.push({r, c}, {r: r+1, c}, {r: r+2, c});
+            if (grid[r][c].type === grid[r+1][c].type && grid[r][c].type === grid[r+2][c].type)
+                matches.push({r,c},{r:r+1,c},{r:r+2,c});
         }
     }
-    return matched;
+    return matches;
 }
 
-async function processMatches(lastR, lastC) {
-    isAnimating = true;
+async function processAllMatches(spawnR, spawnC) {
     let matches = findMatches();
-    if (matches.length === 0) { isAnimating = false; checkWin(); return; }
+    if (matches.length === 0) { checkWin(); return; }
 
-    let toClear = new Set(matches.map(p => `${p.r},${p.c}`));
-    let createdSpecial = matches.length === 4 ? 'missile' : (matches.length >= 5 ? 'bomb' : null);
+    // 1. Highlight matches
+    matches.forEach(m => document.getElementById(grid[m.r][m.c].id).classList.add('matching'));
+    await new Promise(res => setTimeout(res, 400));
 
-    toClear.forEach(id => {
-        const [r, c] = id.split(',').map(Number);
-        const cell = grid[r][c];
-        if (cell.special === 'missile') {
-            for(let i=0; i<size; i++) { toClear.add(`${r},${i}`); toClear.add(`${i},${c}`); }
-        }
-        if (cell.special === 'bomb') {
-            for(let i=-1; i<=1; i++) for(let j=-1; j<=1; j++) {
-                if(grid[r+i] && grid[r+i][c+j]) toClear.add(`${r+i},${c+j}`);
-            }
-        }
+    // 2. Clear matches & track goals
+    let toClear = new Set(matches.map(m => `${m.r},${m.c}`));
+    let special = matches.length === 4 ? 'missile' : (matches.length >= 5 ? 'bomb' : null);
+
+    toClear.forEach(pos => {
+        const [r, c] = pos.split(',').map(Number);
+        goals[grid[r][c].type]++;
+        grid[r][c].type = -1; // Temp mark
     });
 
-    toClear.forEach(id => {
-        const [r, c] = id.split(',').map(Number);
-        if (grid[r][c].type !== -1) {
-            goals[grid[r][c].type]++;
-            grid[r][c].type = -1;
-            grid[r][c].special = null;
+    // 3. Remove from grid
+    for(let r=0; r<size; r++) {
+        for(let c=0; c<size; c++) {
+            if(grid[r][c].type === -1) grid[r][c] = null;
         }
-    });
+    }
+    drawBoard();
+    await new Promise(res => setTimeout(res, 100));
 
-    if (createdSpecial) grid[lastR][lastC] = { type: Math.floor(Math.random() * icons.length), special: createdSpecial };
-
-    render();
-    await new Promise(r => setTimeout(r, 250));
+    // 4. Drop and Fill
     dropTiles();
-    fillEmpty();
-    render();
-    processMatches(lastR, lastC);
+    fillTiles();
+    drawBoard();
+    
+    await new Promise(res => setTimeout(res, 400));
+    await processAllMatches(); // Cascade
 }
 
 function dropTiles() {
     for (let c = 0; c < size; c++) {
-        for (let r = size - 1; r > 0; r--) {
-            if (grid[r][c].type === -1) {
+        for (let r = size - 1; r >= 0; r--) {
+            if (!grid[r][c]) {
                 for (let k = r - 1; k >= 0; k--) {
-                    if (grid[k][c].type !== -1) {
-                        grid[r][c] = {...grid[k][c]};
-                        grid[k][c].type = -1;
+                    if (grid[k][c]) {
+                        grid[r][c] = grid[k][c];
+                        grid[k][c] = null;
                         break;
                     }
                 }
@@ -210,53 +215,59 @@ function dropTiles() {
     }
 }
 
-function fillEmpty() {
-    grid.forEach(row => row.forEach(cell => {
-        if (cell.type === -1) {
-            cell.type = Math.floor(Math.random() * icons.length);
-            cell.special = Math.random() > 0.98 ? (Math.random() > 0.5 ? 'missile' : 'bomb') : null;
+function fillTiles() {
+    for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+            if (!grid[r][c]) grid[r][c] = { id: Math.random(), type: Math.floor(Math.random()*icons.length), special: null };
         }
-    }));
+    }
 }
 
-function updateUI() {
+function renderGoals() {
+    const container = document.getElementById('goal-container');
+    container.innerHTML = goals.map((g, i) => `
+        <div class="goal-item" id="goal-box-${i}">
+            <span class="goal-icon">${icons[i]}</span>
+            <span class="count">${g}/${targets[i]}</span>
+        </div>
+    `).join('');
+}
+
+function updateStats() {
     goals.forEach((g, i) => {
-        document.getElementById(`g${i}`).innerText = `${g}/${targets[i]}`;
-        document.getElementById(`g${i}`).parentElement.style.opacity = g >= targets[i] ? '0.4' : '1';
+        const box = document.getElementById(`goal-box-${i}`);
+        if(box) {
+            box.querySelector('.count').innerText = `${g}/${targets[i]}`;
+            box.style.borderColor = g >= targets[i] ? 'var(--btn)' : 'rgba(255,255,255,0.1)';
+        }
     });
-    const totalCollected = goals.reduce((a, b) => a + b, 0);
-    const ratio = moves === 0 ? 0 : (totalCollected / moves).toFixed(2);
+    const total = goals.reduce((a,b)=>a+b,0);
+    const ratio = moves === 0 ? 0 : (total/moves).toFixed(2);
     document.getElementById('move-val').innerText = moves;
     document.getElementById('ratio-val').innerText = ratio;
 }
 
 function checkWin() {
     if (goals.every((g, i) => g >= targets[i])) {
-        const total = goals.reduce((a, b) => a + b, 0);
-        const ratio = (total / moves).toFixed(2);
         document.getElementById('modal').style.display = 'block';
+        const ratio = (goals.reduce((a,b)=>a+b,0) / moves).toFixed(2);
         document.getElementById('final-stats').innerText = `Efficiency: ${ratio}`;
-        
-        let comment = "Needs more practice! 😉";
-        if (ratio > 2.5) comment = "Absolute Masterclass! 💎";
-        else if (ratio > 1.8) comment = "Very Efficient! ⭐";
-        else if (ratio > 1.2) comment = "Solid Strategy. 😊";
-        
-        document.getElementById('commentary').innerText = comment;
     }
 }
 
 function nextLevel() {
     document.getElementById('modal').style.display = 'none';
-    goals = [0, 0, 0, 0];
-    moves = 0;
-    targets = targets.map(t => Math.floor(Math.random() * 10) + 10);
-    manualShuffle();
-    render();
+    moves = 0; goals = [0,0,0,0];
+    targets = targets.map(t => Math.floor(Math.random()*10)+10);
+    init();
 }
 
-document.getElementById('shuffle-btn').onclick = manualShuffle;
-initGame();
+function manualShuffle() {
+    grid.forEach(row => row.forEach(cell => cell.type = Math.floor(Math.random()*icons.length)));
+    drawBoard();
+}
+
+init();
 </script>
 </body>
 </html>
