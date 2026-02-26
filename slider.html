@@ -30,6 +30,12 @@
         .mode-toggle { background: #30363d; padding: 5px; border-radius: 20px; display: flex; gap: 5px; }
         .mode-btn { border: none; background: none; color: #8b949e; padding: 5px 10px; border-radius: 15px; cursor: pointer; font-size: 10px; font-weight: bold; }
         .mode-btn.active { background: var(--accent); color: #000; }
+        .block.flash {
+    filter: brightness(3) white;
+    transform: scale(1.1);
+    transition: all 0.1s ease-out;
+    z-index: 10;
+}
     </style>
 </head>
 <body>
@@ -56,7 +62,6 @@
 const gridWidth = 8, gridHeight = 11, cellSize = 40;
 let score = 0, blocks = [], gameMode = 'slider', isBusy = false;
 let nextBlockData = null;
-
 const colors = ['#ff4757', '#2ed573', '#1e90ff', '#ffa502', '#70a1ff', '#eccc68'];
 
 function setMode(m) {
@@ -68,9 +73,9 @@ function setMode(m) {
 }
 
 function generateNext() {
-    nextBlockData = {
-        width: Math.floor(Math.random() * 3) + 1,
-        color: colors[Math.floor(Math.random() * colors.length)]
+    nextBlockData = { 
+        width: Math.floor(Math.random() * 3) + 1, 
+        color: colors[Math.floor(Math.random() * colors.length)] 
     };
     const pDisplay = document.getElementById('preview-display');
     pDisplay.style.width = (nextBlockData.width * 15) + 'px';
@@ -78,12 +83,18 @@ function generateNext() {
 }
 
 function createBlock(x, y, width, color) {
-    return { id: 'b' + Math.random().toString(36).substr(2,9), x, y, width, color: color || colors[Math.floor(Math.random()*colors.length)] };
+    return { 
+        id: 'b' + Math.random().toString(36).substr(2,9), 
+        x, y, width, 
+        color: color || colors[Math.floor(Math.random()*colors.length)],
+        flash: false
+    };
 }
 
 function spawnSkyBlock() {
     const x = Math.floor(Math.random() * (gridWidth - nextBlockData.width));
-    blocks.push(createBlock(x, gridHeight - 1, nextBlockData.width, nextBlockData.color));
+    const newBlock = createBlock(x, gridHeight - 1, nextBlockData.width, nextBlockData.color);
+    blocks.push(newBlock);
     generateNext();
 }
 
@@ -91,7 +102,7 @@ function initRow(y) {
     let x = 0;
     while (x < gridWidth - 1) {
         let w = Math.floor(Math.random() * 3) + 1;
-        if (x + w >= gridWidth) w = gridWidth - x - 1; 
+        if (x + w >= gridWidth) w = gridWidth - x - 1;
         if (Math.random() > 0.3) blocks.push(createBlock(x, y, w));
         x += w + 1;
     }
@@ -100,11 +111,13 @@ function initRow(y) {
 function draw() {
     const container = document.getElementById('grid-container');
     const ids = new Set(blocks.map(b => b.id));
+    
     blocks.forEach(b => {
         let el = document.getElementById(b.id);
         if (!el) {
             el = document.createElement('div');
-            el.id = b.id; el.className = 'block';
+            el.id = b.id;
+            el.className = 'block';
             el.onmousedown = (e) => startDrag(e, b);
             el.ontouchstart = (e) => startDrag(e, b);
             container.appendChild(el);
@@ -113,8 +126,15 @@ function draw() {
         el.style.left = (b.x * cellSize) + 'px';
         el.style.top = ((gridHeight - 1 - b.y) * cellSize) + 'px';
         el.style.backgroundColor = b.color;
+        
+        // This makes the "Ceremony" happen!
+        if (b.flash) el.classList.add('flash');
+        else el.classList.remove('flash');
     });
-    Array.from(container.children).forEach(child => { if (!ids.has(child.id)) child.remove(); });
+
+    Array.from(container.children).forEach(child => {
+        if (!ids.has(child.id)) child.remove();
+    });
     document.getElementById('score').innerText = score;
 }
 
@@ -125,8 +145,10 @@ function startDrag(e, block) {
     activeBlock = block;
     startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
     originalX = block.x;
-    window.onmousemove = drag; window.ontouchmove = drag;
-    window.onmouseup = endDrag; window.ontouchend = endDrag;
+    window.onmousemove = drag;
+    window.ontouchmove = drag;
+    window.onmouseup = endDrag;
+    window.ontouchend = endDrag;
 }
 
 function drag(e) {
@@ -134,27 +156,50 @@ function drag(e) {
     const currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
     const diff = Math.round((currentX - startX) / cellSize);
     let newX = Math.max(0, Math.min(originalX + diff, gridWidth - activeBlock.width));
-    const collision = blocks.find(b => b.y === activeBlock.y && b.id !== activeBlock.id && newX < b.x + b.width && newX + activeBlock.width > b.x);
-    if (!collision) { activeBlock.x = newX; draw(); }
+    
+    const collision = blocks.find(b => 
+        b.y === activeBlock.y && 
+        b.id !== activeBlock.id && 
+        newX < b.x + b.width && 
+        newX + activeBlock.width > b.x
+    );
+    
+    if (!collision) {
+        activeBlock.x = newX;
+        draw();
+    }
 }
 
 async function endDrag() {
     window.onmousemove = null; window.ontouchmove = null;
     if (!activeBlock) return;
-    activeBlock = null; isBusy = true;
-    
+    activeBlock = null;
+    isBusy = true;
+
     await applyGravity();
-    
+
     if (gameMode === 'slider') {
+        // THE BIG LIFT
         blocks.forEach(b => b.y++);
+        draw();
+        await new Promise(r => setTimeout(r, 250));
+        
         initRow(0);
+        draw();
+        await new Promise(r => setTimeout(r, 200));
     } else {
         spawnSkyBlock();
     }
+
+    await applyGravity(); // THE TUMBLE
     
-    await applyGravity();
-    isBusy = false; draw();
-    if (blocks.some(b => b.y >= gridHeight - 1)) { alert("Game Over!"); resetGame(); }
+    isBusy = false;
+    draw();
+
+    if (blocks.some(b => b.y >= gridHeight - 1)) {
+        alert("Game Over!");
+        resetGame();
+    }
 }
 
 async function applyGravity() {
@@ -162,22 +207,42 @@ async function applyGravity() {
     while (changed) {
         changed = false;
         blocks.sort((a, b) => a.y - b.y);
+
         for (let b of blocks) {
             while (b.y > 0) {
-                const below = blocks.find(other => other.id !== b.id && other.y === b.y - 1 && b.x < other.x + other.width && b.x + b.width > other.x);
-                if (!below) { b.y--; changed = true; } else break;
+                const below = blocks.find(other => 
+                    other.id !== b.id && 
+                    other.y === b.y - 1 && 
+                    b.x < other.x + other.width && 
+                    b.x + b.width > other.x
+                );
+                if (!below) { b.y--; changed = true; } 
+                else break;
             }
         }
-        if (changed) { draw(); await new Promise(r => setTimeout(r, 150)); }
 
+        if (changed) {
+            draw();
+            await new Promise(r => setTimeout(r, 150)); 
+        }
+
+        // ROW CLEAR CEREMONY
         for (let y = 0; y < gridHeight; y++) {
             let rowFill = new Array(gridWidth).fill(false);
-            blocks.filter(b => b.y === y).forEach(b => { for (let i = 0; i < b.width; i++) rowFill[b.x + i] = true; });
+            let rowBlocks = blocks.filter(b => b.y === y);
+            rowBlocks.forEach(b => {
+                for (let i = 0; i < b.width; i++) rowFill[b.x + i] = true;
+            });
+
             if (rowFill.every(f => f)) {
+                rowBlocks.forEach(b => b.flash = true);
+                draw();
+                await new Promise(r => setTimeout(r, 250)); // Shine time
+                
                 blocks = blocks.filter(b => b.y !== y);
-                blocks.forEach(b => { if (b.y > y) b.y--; });
-                score += 100; changed = true;
-                draw(); await new Promise(r => setTimeout(r, 150));
+                score += 100;
+                changed = true;
+                draw();
             }
         }
     }
@@ -189,10 +254,9 @@ function resetGame() {
     initRow(0); initRow(1); initRow(2);
     draw();
 }
-
 resetGame();
 </script>
 
-
 </body>
+
 </html>
